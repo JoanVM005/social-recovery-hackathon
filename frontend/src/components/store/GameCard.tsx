@@ -31,7 +31,7 @@ export function GameCard({ title, price, discount, tags }: GameCardProps) {
             </Badge>
           ))}
         </div>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
           {discount && (
             <span className="rounded bg-[#4c6b22] px-2 py-0.5 text-sm font-bold text-[#beee11]">
               -{discount}%

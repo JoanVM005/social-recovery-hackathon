@@ -6,8 +6,10 @@ import { StorePage } from "@/pages/StorePage"
 function App() {
   return (
     <div className="min-h-screen bg-[#1b2838] text-white">
-      <TopBar />
-      <Navbar />
+      <div className="sticky top-0 z-50">
+        <TopBar />
+        <Navbar />
+      </div>
       <SubNav />
       <StorePage />
     </div>
