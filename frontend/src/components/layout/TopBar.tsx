@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ChevronDown, User, MessageSquare, Settings, LogOut, Wallet, ShieldCheck } from "lucide-react"
 
-export function TopBar() {
+export function TopBar({ onLogout }: { onLogout?: () => void }) {
   return (
     <div className="bg-[#171a21] text-[#b8b6b4] text-sm">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-2">
@@ -52,7 +52,7 @@ export function TopBar() {
               <ShieldCheck className="h-4 w-4" /> Choose My Guardians
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-[#2a475e]" />
-            <DropdownMenuItem className="gap-2 text-sm focus:bg-[#3d4450] focus:text-white">
+            <DropdownMenuItem onClick={onLogout} className="gap-2 text-sm focus:bg-[#3d4450] focus:text-white">
               <LogOut className="h-4 w-4" /> Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>

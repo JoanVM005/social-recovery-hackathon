@@ -128,3 +128,18 @@
     font-size: 125%; /* 18px base — scales all rem-based sizes up */
   }
 }
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.35s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@layer components {
+  .steam-input {
+    @apply h-9 rounded-sm border border-[#2a475e]/60 bg-[#32455b] text-sm text-white placeholder:text-[#8f98a0]/60 focus-visible:border-[#67c1f5]/60 focus-visible:ring-1 focus-visible:ring-[#67c1f5]/30;
+  }
+}
