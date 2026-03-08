@@ -14,10 +14,10 @@ const GAMES = [
 export function GameGrid() {
   return (
     <div>
-      <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-[#67c1f5]">
+      <h3 className="mb-4 text-lg font-medium uppercase tracking-wide text-[#67c1f5]">
         Special Offers
       </h3>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-4 gap-4">
         {GAMES.map((game) => (
           <GameCard key={game.title} {...game} />
         ))}

@@ -8,8 +8,8 @@ export function SubNav() {
     "Labs",
   ]
   return (
-    <div className="bg-[#1b2838] text-xs text-[#b8b6b4]">
-      <div className="mx-auto flex max-w-[1200px] items-center gap-4 px-4 py-1.5">
+    <div className="bg-[#1b2838] text-sm text-[#b8b6b4]">
+      <div className="mx-auto flex max-w-[1600px] items-center gap-6 px-6 py-2">
         {links.map((l) => (
           <span key={l} className="cursor-pointer hover:text-white">
             {l}

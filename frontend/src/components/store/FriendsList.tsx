@@ -19,11 +19,11 @@ const statusColor: Record<string, string> = {
 
 export function FriendsList() {
   return (
-    <div className="w-60 shrink-0 rounded bg-[#0e1c2a] p-3 flex flex-col justify-between">
-      <h4 className="mb-2 text-xs font-medium uppercase tracking-wider text-[#67c1f5]">
+    <div className="w-72 shrink-0 rounded bg-[#0e1c2a] p-4">
+      <h4 className="mb-3 text-sm font-medium uppercase tracking-wider text-[#67c1f5]">
         Friends
       </h4>
-      <ScrollArea className="h-96">
+      <ScrollArea className="h-96 mb-35">
         <ul className="space-y-1">
           {FRIENDS.map((f) => (
             <li
@@ -31,8 +31,8 @@ export function FriendsList() {
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 transition hover:bg-[#1a3a4a]"
             >
               <div className="relative">
-                <Avatar className="h-7 w-7">
-                  <AvatarFallback className="bg-[#2a475e] text-[10px] text-[#c7d5e0]">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-[#2a475e] text-xs text-[#c7d5e0]">
                     {f.name[0]}
                   </AvatarFallback>
                 </Avatar>
@@ -41,11 +41,11 @@ export function FriendsList() {
                 />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-xs text-[#c7d5e0]">{f.name}</p>
+                <p className="truncate text-sm text-[#c7d5e0]">{f.name}</p>
                 {f.game ? (
-                  <p className="truncate text-[10px] text-[#57cbde]">{f.game}</p>
+                  <p className="truncate text-xs text-[#57cbde]">{f.game}</p>
                 ) : (
-                  <p className="text-[10px] capitalize text-[#636363]">{f.status}</p>
+                  <p className="text-xs capitalize text-[#636363]">{f.status}</p>
                 )}
               </div>
             </li>

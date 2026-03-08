@@ -5,10 +5,10 @@ import { FriendsList } from "@/components/store/FriendsList"
 
 export function StorePage() {
   return (
-    <div className="mx-auto max-w-[1200px] px-4 py-6">
+    <div className="mx-auto max-w-[1600px] px-6 py-8">
       <FeaturedBanner />
 
-      <div className="mt-6 flex gap-6">
+      <div className="mt-8 flex gap-8">
         <CategorySidebar />
         <div className="flex-1">
           <GameGrid />
