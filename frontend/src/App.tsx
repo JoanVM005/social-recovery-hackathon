@@ -1,8 +1,16 @@
+import { TopBar } from "@/components/layout/TopBar"
+import { Navbar } from "@/components/layout/Navbar"
+import { SubNav } from "@/components/layout/SubNav"
+import { StorePage } from "@/pages/StorePage"
+
 function App() {
   return (
-    <main className="min-h-screen p-8">
-      <h1 className="text-2xl font-bold">Hello, world!</h1>
-    </main>
+    <div className="min-h-screen bg-[#1b2838] text-white">
+      <TopBar />
+      <Navbar />
+      <SubNav />
+      <StorePage />
+    </div>
   )
 }
 
