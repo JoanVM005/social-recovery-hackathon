@@ -1,22 +1,32 @@
 import { useState } from "react"
 import { X } from "lucide-react"
-import { FRIENDS } from "@/components/store/FriendsList"
 import { GuardianConfigStep } from "./GuardianConfigStep"
 import { GuardianSelectStep } from "./GuardianSelectStep"
+import { useUsers } from "@/lib/useUsers"
 
 interface GuardianConfig {
   threshold: number
   totalGuardians: number
   selectedGuardians: string[]
+  /** username → on-chain party ID (bigint) for each selected guardian */
+  partyIds: Record<string, bigint>
 }
 
-interface Props { onClose: () => void; onGuardiansConfirmed?: (config: GuardianConfig) => void }
+interface Props {
+  onClose: () => void
+  onGuardiansConfirmed?: (config: GuardianConfig) => void
+  currentUsername?: string
+}
 
-export function GuardianModal({ onClose, onGuardiansConfirmed }: Props) {
+export function GuardianModal({ onClose, onGuardiansConfirmed, currentUsername }: Props) {
   const [step, setStep] = useState<1 | 2>(1)
   const [totalGuardians, setTotalGuardians] = useState(3)
   const [threshold, setThreshold] = useState(2)
   const [selected, setSelected] = useState<string[]>([])
+
+  const { users, loading } = useUsers()
+  // Exclude the current user — you can't be your own guardian.
+  const eligibleUsers = users.filter((u) => u.username !== currentUsername)
 
   function toggleFriend(name: string) {
     setSelected((prev) =>
@@ -25,7 +35,13 @@ export function GuardianModal({ onClose, onGuardiansConfirmed }: Props) {
   }
 
   function handleConfirm() {
-    onGuardiansConfirmed?.({ threshold, totalGuardians, selectedGuardians: selected })
+    const partyIds: Record<string, bigint> = {}
+    for (const u of eligibleUsers) {
+      if (selected.includes(u.username) && u.party_id != null) {
+        partyIds[u.username] = BigInt(u.party_id)
+      }
+    }
+    onGuardiansConfirmed?.({ threshold, totalGuardians, selectedGuardians: selected, partyIds })
     onClose()
   }
 
@@ -44,7 +60,7 @@ export function GuardianModal({ onClose, onGuardiansConfirmed }: Props) {
           <GuardianConfigStep
             totalGuardians={totalGuardians}
             threshold={threshold}
-            maxGuardians={FRIENDS.length}
+            maxGuardians={eligibleUsers.length}
             onTotalChange={setTotalGuardians}
             onThresholdChange={setThreshold}
             onNext={() => { setSelected([]); setStep(2) }}
@@ -53,6 +69,8 @@ export function GuardianModal({ onClose, onGuardiansConfirmed }: Props) {
           <GuardianSelectStep
             totalGuardians={totalGuardians}
             selected={selected}
+            users={eligibleUsers}
+            loading={loading}
             onToggle={toggleFriend}
             onBack={() => setStep(1)}
             onConfirm={handleConfirm}

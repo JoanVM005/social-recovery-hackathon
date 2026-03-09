@@ -64,6 +64,17 @@ export const OFFCHAIN_BOARD_ABI = [
       { name: "active", type: "bool" },
     ],
   },
+  {
+    name: "parties",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "partyId", type: "uint256" }],
+    outputs: [
+      { name: "registered", type: "bool" },
+      { name: "signer", type: "address" },
+      { name: "pkCommitment", type: "bytes32" },
+    ],
+  },
 ] as const
 
 // ═══════════════════════════════════════════════════════════════════════

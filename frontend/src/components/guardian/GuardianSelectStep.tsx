@@ -1,26 +1,28 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SteamButton } from "@/components/ui/steam-button"
-import { FRIENDS } from "@/components/store/FriendsList"
-import { ArrowLeft, Check } from "lucide-react"
+import { ArrowLeft, Check, Loader } from "lucide-react"
+import type { BackendUser } from "@/lib/useUsers"
 
 const statusColor: Record<string, string> = {
   online: "bg-[#57cbde]",
-  away: "bg-[#e8b94d]",
   offline: "bg-[#636363]",
 }
 
 interface Props {
   totalGuardians: number
   selected: string[]
+  users: BackendUser[]
+  loading: boolean
   onToggle: (name: string) => void
   onBack: () => void
   onConfirm: () => void
 }
 
-function FriendRow({ name, status, isSelected, onToggle }: {
-  name: string; status: string; isSelected: boolean; onToggle: () => void
+function FriendRow({ user, isSelected, onToggle }: {
+  user: BackendUser; isSelected: boolean; onToggle: () => void
 }) {
+  const status = user.online ? "online" : "offline"
   return (
     <li
       onClick={onToggle}
@@ -30,11 +32,14 @@ function FriendRow({ name, status, isSelected, onToggle }: {
     >
       <div className="relative">
         <Avatar className="h-9 w-9">
-          <AvatarFallback className="bg-[#2a475e] text-xs text-[#c7d5e0]">{name[0]}</AvatarFallback>
+          <AvatarFallback className="bg-[#2a475e] text-xs text-[#c7d5e0]">{user.username[0]}</AvatarFallback>
         </Avatar>
         <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#162330] ${statusColor[status]}`} />
       </div>
-      <span className="flex-1 text-sm text-[#c7d5e0]">{name}</span>
+      <span className="flex-1 text-sm text-[#c7d5e0]">{user.username}</span>
+      {user.online && (
+        <span className="text-[10px] text-[#57cbde] mr-2">online</span>
+      )}
       <div className={`flex h-5 w-5 items-center justify-center rounded-sm border ${
         isSelected ? "border-[#67c1f5] bg-[#67c1f5]" : "border-[#2a475e] bg-transparent"
       }`}>
@@ -44,7 +49,7 @@ function FriendRow({ name, status, isSelected, onToggle }: {
   )
 }
 
-export function GuardianSelectStep({ totalGuardians, selected, onToggle, onBack, onConfirm }: Props) {
+export function GuardianSelectStep({ totalGuardians, selected, users, loading, onToggle, onBack, onConfirm }: Props) {
   const isFull = selected.length >= totalGuardians
   return (
     <div className="flex flex-col gap-4">
@@ -61,20 +66,26 @@ export function GuardianSelectStep({ totalGuardians, selected, onToggle, onBack,
       </div>
 
       <ScrollArea className="h-64">
-        <ul className="space-y-1 p-1">
-          {FRIENDS.map((f) => (
-            <FriendRow
-              key={f.name}
-              name={f.name}
-              status={f.status}
-              isSelected={selected.includes(f.name)}
-              onToggle={() => {
-                if (!selected.includes(f.name) && isFull) return
-                onToggle(f.name)
-              }}
-            />
-          ))}
-        </ul>
+        {loading ? (
+          <div className="flex items-center justify-center h-32 gap-2 text-[#8f98a0] text-xs">
+            <Loader className="h-4 w-4 animate-spin" />
+            Loading users…
+          </div>
+        ) : (
+          <ul className="space-y-1 p-1">
+            {users.map((u) => (
+              <FriendRow
+                key={u.username}
+                user={u}
+                isSelected={selected.includes(u.username)}
+                onToggle={() => {
+                  if (!selected.includes(u.username) && isFull) return
+                  onToggle(u.username)
+                }}
+              />
+            ))}
+          </ul>
+        )}
       </ScrollArea>
 
       <SteamButton onClick={onConfirm} disabled={selected.length !== totalGuardians}>
@@ -83,3 +94,4 @@ export function GuardianSelectStep({ totalGuardians, selected, onToggle, onBack,
     </div>
   )
 }
+

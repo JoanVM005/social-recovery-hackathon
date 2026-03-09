@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react"
+import { useAccount, usePublicClient } from "wagmi"
 import { TopBar } from "@/components/layout/TopBar"
 import { Navbar } from "@/components/layout/Navbar"
 import { SubNav } from "@/components/layout/SubNav"
@@ -11,6 +12,7 @@ import { GuardianRequestFlow } from "@/components/guardian/GuardianRequestFlow"
 import { BackupCreationFlow } from "@/components/guardian/BackupCreationFlow"
 import { saveUser, generateUserId, getUser } from "@/lib/userStore"
 import { useWebSocket } from "@/lib/useWebSocket"
+import { CONTRACT_ADDRESS, OFFCHAIN_BOARD_ABI } from "@/lib/contract"
 
 type Page = "login" | "connect-wallet" | "store"
 
@@ -39,6 +41,7 @@ function App() {
     ownerId: string          // captured at start time — immune to localStorage overwrites
     threshold: number
     selectedGuardians: string[]
+    partyIds: Record<string, bigint>
   } | null>(null)
   const [guardianResponses, setGuardianResponses] = useState<Record<string, string>>({})
 
@@ -55,6 +58,13 @@ function App() {
       requester_id?: string
       guardian_slot?: string  // the FRIENDS display-name the guardian claimed
       guardian_secret?: string
+      party_id?: number | null
+      known?: boolean
+    }
+
+    if (msg.type === "identified") {
+      console.log(`[WS] identified as "${msg.username}" (party_id=${msg.party_id}, known=${msg.known})`)
+      return
     }
 
     if (msg.type === "guardian_request") {
@@ -83,7 +93,29 @@ function App() {
     }
   }, [])
 
-  const { send } = useWebSocket(page === "store", handleWsMessage)
+  const { address } = useAccount()
+  const publicClient = usePublicClient()
+
+  const wsUsername = page === "store" ? (getUser()?.username ?? undefined) : undefined
+  const { send } = useWebSocket(page === "store", handleWsMessage, wsUsername)
+
+  // When entering the store, query our on-chain party ID and report it to the
+  // backend so other users can look us up as a potential guardian.
+  useEffect(() => {
+    if (page !== "store" || !address || !publicClient) return
+    let cancelled = false
+    publicClient.readContract({
+      address: CONTRACT_ADDRESS,
+      abi: OFFCHAIN_BOARD_ABI,
+      functionName: "partyIdOfSigner",
+      args: [address],
+    }).then((id) => {
+      if (!cancelled && id !== 0n) {
+        send({ type: "set_party_id", party_id: Number(id) })
+      }
+    }).catch(() => { /* user not yet registered on-chain — that's fine */ })
+    return () => { cancelled = true }
+  }, [page, address, publicClient, send])
 
   function handleConnected() {
     const key = generateSecretKey()
@@ -116,6 +148,7 @@ function App() {
         <GuardianRequestFlow
           requesterUsername={guardianRequest.username}
           guardianSlots={guardianRequest.selectedNames}
+          currentUsername={getUser()?.username}
           onDeny={() => setGuardianRequest(null)}
           onSubmitCode={(code, slot) => {
             // Send the guardian's secret back to the requester via WebSocket.
@@ -134,6 +167,7 @@ function App() {
       {showGuardians && (
         <GuardianModal
           onClose={() => setShowGuardians(false)}
+          currentUsername={getUser()?.username}
           onGuardiansConfirmed={(config) => {
             const user = getUser()
             if (!user) return
@@ -143,6 +177,7 @@ function App() {
               ownerId: user.id,
               threshold: config.threshold,
               selectedGuardians: config.selectedGuardians,
+              partyIds: config.partyIds,
             })
             setGuardianResponses({})
             // Include selected_names so guardians know which slot to claim.
@@ -160,6 +195,7 @@ function App() {
           secretKey={secretKey}
           threshold={pendingBackup.threshold}
           selectedGuardians={pendingBackup.selectedGuardians}
+          partyIds={pendingBackup.partyIds}
           guardianResponses={guardianResponses}
           onClose={() => { setPendingBackup(null); setGuardianResponses({}) }}
         />

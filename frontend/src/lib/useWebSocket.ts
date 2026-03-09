@@ -2,10 +2,16 @@ import { useEffect, useRef, useCallback } from "react"
 
 const WS_URL = "ws://localhost:8000/ws"
 
-export function useWebSocket(enabled: boolean, onMessage?: (data: unknown) => void) {
+export function useWebSocket(
+  enabled: boolean,
+  onMessage?: (data: unknown) => void,
+  username?: string,
+) {
   const wsRef = useRef<WebSocket | null>(null)
   const onMessageRef = useRef(onMessage)
+  const usernameRef = useRef(username)
   useEffect(() => { onMessageRef.current = onMessage }, [onMessage])
+  useEffect(() => { usernameRef.current = username }, [username])
 
   useEffect(() => {
     if (!enabled) return
@@ -13,7 +19,12 @@ export function useWebSocket(enabled: boolean, onMessage?: (data: unknown) => vo
     const ws = new WebSocket(WS_URL)
     wsRef.current = ws
 
-    ws.onopen = () => console.log("[WS] connected")
+    ws.onopen = () => {
+      console.log("[WS] connected")
+      if (usernameRef.current) {
+        ws.send(JSON.stringify({ type: "identify", username: usernameRef.current }))
+      }
+    }
     ws.onmessage = (e) => {
       try { onMessageRef.current?.(JSON.parse(e.data)) } catch { /* ignore */ }
     }

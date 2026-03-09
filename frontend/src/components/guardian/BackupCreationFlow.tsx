@@ -16,6 +16,14 @@ import {
   DEMO_PARTY_IDS,
 } from "@/lib/contract"
 
+// Merged lookup: backend-supplied IDs take precedence over the static demo map.
+function resolvePartyId(name: string, partyIds: Record<string, bigint>): bigint {
+  if (partyIds[name] != null) return partyIds[name]
+  const demo = DEMO_PARTY_IDS[name]
+  if (demo != null) return demo
+  throw new Error(`No party ID found for "${name}". Ensure the guardian has registered on-chain.`)
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 //  Types
 // ═══════════════════════════════════════════════════════════════════════
@@ -35,8 +43,10 @@ interface Props {
   secretKey: string
   /** Number of guardians required to recover (UI counter value). */
   threshold: number
-  /** Names of selected friends (must exist in DEMO_PARTY_IDS). */
+  /** Names of selected friends. */
   selectedGuardians: string[]
+  /** username → on-chain party ID, sourced from the backend /users endpoint. */
+  partyIds: Record<string, bigint>
   /** Guardian name → their submitted secret code. */
   guardianResponses: Record<string, string>
   /** Called when the user dismisses the flow. */
@@ -51,6 +61,7 @@ export function BackupCreationFlow({
   secretKey,
   threshold,
   selectedGuardians,
+  partyIds,
   guardianResponses,
   onClose,
 }: Props) {
@@ -84,8 +95,7 @@ export function BackupCreationFlow({
       const secretScalar = secretKeyToScalar(secretKey)
 
       const guardianShares: GuardianShare[] = selectedGuardians.map((name) => {
-        const id = DEMO_PARTY_IDS[name]
-        if (!id) throw new Error(`No party ID mapped for "${name}"`)
+        const id = resolvePartyId(name, partyIds)
         const sigma = deriveGuardianSigma(
           secretKey,
           guardianResponses[name],
@@ -134,6 +144,27 @@ export function BackupCreationFlow({
       }
 
       // ── Step 4: Publish backup on Sepolia ────────────────────────────
+      // Pre-flight: verify all guardian IDs are registered on-chain.
+      // If a guardian wallet hasn't called registerParty yet the contract
+      // would revert with InvalidGuardianSet — surface a clear error here.
+      for (const gid of args.guardianIds) {
+        const allIds = { ...Object.fromEntries(Object.entries(DEMO_PARTY_IDS)), ...Object.fromEntries(Object.entries(partyIds)) }
+        const name = Object.entries(allIds).find(([, id]) => id === gid)?.[0] ?? `ID ${gid}`
+        const result = await publicClient.readContract({
+          address: CONTRACT_ADDRESS,
+          abi: OFFCHAIN_BOARD_ABI,
+          functionName: "parties",
+          args: [gid],
+        })
+        const registered: boolean = result[0]
+        if (!registered) {
+          throw new Error(
+            `Guardian "${name}" (party ID ${gid}) is not registered on-chain. ` +
+            `Run the guardian wallet setup and call registerParty before creating a backup.`
+          )
+        }
+      }
+
       setStep("publishing")
       const pubHash = await writeContractAsync({
         address: CONTRACT_ADDRESS,

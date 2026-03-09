@@ -10,12 +10,17 @@ interface Props {
   onDeny: () => void
   /** Called with the guardian's secret code and the slot name they claimed. */
   onSubmitCode: (code: string, slot: string) => void
+  /** Logged-in username of this window — auto-selects the matching slot. */
+  currentUsername?: string
 }
 
-export function GuardianRequestFlow({ requesterUsername, guardianSlots, onDeny, onSubmitCode }: Props) {
+export function GuardianRequestFlow({ requesterUsername, guardianSlots, onDeny, onSubmitCode, currentUsername }: Props) {
   const [step, setStep] = useState<"prompt" | "secret">("prompt")
   const [code, setCode] = useState("")
-  const [slot, setSlot] = useState(guardianSlots[0] ?? "")
+  const [slot, setSlot] = useState(() => {
+    if (currentUsername && guardianSlots.includes(currentUsername)) return currentUsername
+    return guardianSlots[0] ?? ""
+  })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -40,6 +45,9 @@ export function GuardianRequestFlow({ requesterUsername, guardianSlots, onDeny, 
           <PromptStep requesterUsername={requesterUsername} onDeny={onDeny} onAccept={() => setStep("secret")} />
         ) : (
           <SecretStep
+            slots={guardianSlots}
+            slot={slot}
+            onSlotChange={setSlot}
             code={code}
             onChange={setCode}
             onSubmit={() => onSubmitCode(code, slot)}
@@ -71,13 +79,37 @@ function PromptStep({ requesterUsername, onDeny, onAccept }: {
   )
 }
 
-function SecretStep({ code, onChange, onSubmit }: {
+function SecretStep({ slots, slot, onSlotChange, code, onChange, onSubmit }: {
+  slots: string[]
+  slot: string
+  onSlotChange: (s: string) => void
   code: string
   onChange: (v: string) => void
   onSubmit: () => void
 }) {
   return (
     <>
+      {slots.length > 1 && (
+        <div className="mb-4">
+          <p className="text-[#8f98a0] text-xs mb-2">Which guardian are you?</p>
+          <div className="flex flex-wrap gap-2">
+            {slots.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onSlotChange(s)}
+                className={`px-3 py-1.5 rounded-sm text-xs border cursor-pointer transition-colors ${
+                  slot === s
+                    ? "border-[#67c1f5] bg-[#1a3a4a] text-white"
+                    : "border-[#2a475e] bg-transparent text-[#8f98a0] hover:border-[#67c1f5] hover:text-[#c7d5e0]"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <p className="text-[#8f98a0] text-xs mb-4">
         Enter your secret key to confirm you are who you say you are.
       </p>
@@ -89,7 +121,7 @@ function SecretStep({ code, onChange, onSubmit }: {
           onChange={(e) => onChange(e.target.value)}
           autoFocus
         />
-        <SteamButton onClick={onSubmit} disabled={!code.trim()}>CONFIRM →</SteamButton>
+        <SteamButton onClick={onSubmit} disabled={!code.trim() || !slot}>CONFIRM →</SteamButton>
       </div>
     </>
   )
