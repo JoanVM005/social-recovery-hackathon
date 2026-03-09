@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title ANARKeyBulletinBoard
-/// @notice Bulletin board y coordinador de recovery inspirado en ANARKey.
-/// @dev Esta versión NO publica la secret key recuperada on-chain.
-///      El contrato almacena phi y recolecta sigmas derivados de firmas
-///      deterministas de guardianes. La reconstrucción final debe hacerse
-///      off-chain por privacidad.
-contract ANARKeyBulletinBoard {
+/// @title ANARKeyDemo
+/// @notice Demo contract inspired by ANARKey / BUSS for hackathons.
+/// @dev DEMO ONLY:
+///      - Computes public BUSS points on-chain
+///      - Derives sigma from guardian deterministic signatures
+///      - Allows on-chain reconstruction for demonstration
+///      This is NOT the privacy-preserving production design.
+contract ANARKeyDemo {
     // ============================================================
     //                            ERRORS
     // ============================================================
 
     error AlreadyRegistered();
     error NotRegistered();
-    error NotOwner();
     error InvalidGuardianSet();
     error InvalidThreshold();
     error InvalidPublicPoints();
@@ -23,16 +23,16 @@ contract ANARKeyBulletinBoard {
     error GuardianNotAllowed();
     error AlreadySubmitted();
     error InvalidSignature();
-    error RecoveryNotReady();
-    error LengthMismatch();
     error InvalidSecretScalar();
+    error LengthMismatch();
+    error RecoveryNotReady();
+    error RecoveryClosed();
 
     // ============================================================
     //                          CONSTANTS
     // ============================================================
 
-    /// @dev Campo primo BN254 scalar field.
-    /// Se usa para la aritmética modular de BUSS/Lagrange.
+    /// @dev BN254 scalar field prime.
     uint256 public constant FIELD_MODULUS =
         21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
@@ -43,40 +43,40 @@ contract ANARKeyBulletinBoard {
     //                           STRUCTS
     // ============================================================
 
-    /// @notice Participante registrado en la comunidad.
-    /// @dev pkCommitment es un compromiso al public key real del esquema
-    ///      que se quiere recuperar off-chain.
+    /// @notice A community participant.
+    /// @dev signer is the EVM account used for demo interactions.
+    ///      pkCommitment is a commitment to the "real" public key
+    ///      of the external cryptographic scheme.
     struct Party {
         bool registered;
         address signer;
         bytes32 pkCommitment;
     }
 
-    /// @notice Backup público de una party i.
-    /// @dev En el paper, esto corresponde al resultado público phi producido
-    ///      por Share(s, sigma_B, B).
+    /// @notice Public backup information.
+    /// @dev This is the closest on-chain analogue of pub := phi in the paper.
     struct Backup {
         bool exists;
         uint256 backupId;
         uint256 ownerId;
-        uint64 nonce; // sirve como session/version id del backup
-        uint16 t; // umbral t, hacen falta t+1 guardianes
-        uint16 guardianCount; // n-1
-        bytes32 ownerPkCommitment; // commitment del pk_i
+        uint64 nonce; // unique per backup session
+        uint16 t; // threshold parameter: need t+1 guardian shares
+        uint16 guardianCount; // |B| = n-1 guardians
+        bytes32 ownerPkCommitment;
         uint256[] guardianIds; // B
         uint256[] publicPoints; // phi = f(-1), f(-2), ..., f(-(n-t-1))
         bytes32 publicPointsHash;
         bool active;
     }
 
-    /// @notice Sesión de recovery.
+    /// @notice Recovery session.
     struct RecoverySession {
         bool exists;
         uint256 sessionId;
         uint256 backupId;
         uint256 ownerId;
         uint64 openedAt;
-        uint16 sharesNeeded;    // t + 1
+        uint16 sharesNeeded; // t + 1
         uint16 sharesReceived;
         bool ready;
         bool closed;
@@ -96,14 +96,14 @@ contract ANARKeyBulletinBoard {
     mapping(uint256 => Backup) private _backups;
     mapping(uint256 => RecoverySession) public sessions;
 
-    /// @dev sessionId => guardianId => submitted?
+    /// @dev backupId => guardianId => allowed?
+    mapping(uint256 => mapping(uint256 => bool)) public isGuardianInBackup;
+
+    /// @dev sessionId => guardianId => sigma already submitted?
     mapping(uint256 => mapping(uint256 => bool)) public sigmaSubmitted;
 
-    /// @dev sessionId => guardianId => sigma_{i,j}
+    /// @dev sessionId => guardianId => sigma value
     mapping(uint256 => mapping(uint256 => uint256)) public submittedSigma;
-
-    /// @dev backupId => guardianId => isGuardian?
-    mapping(uint256 => mapping(uint256 => bool)) public isGuardianInBackup;
 
     // ============================================================
     //                            EVENTS
@@ -134,8 +134,7 @@ contract ANARKeyBulletinBoard {
     event SigmaSubmitted(
         uint256 indexed sessionId,
         uint256 indexed guardianId,
-        uint256 sigma,
-        bytes signature
+        uint256 sigma
     );
 
     event RecoveryReady(
@@ -150,8 +149,8 @@ contract ANARKeyBulletinBoard {
     //                      PARTY REGISTRATION
     // ============================================================
 
-    /// @notice Registra una party y fija su commitment del public key.
-    /// @dev El signer EVM representa al participante en el bulletin board.
+    /// @notice Register a community member.
+    /// @param pkCommitment Commitment to the member's public key.
     function registerParty(bytes32 pkCommitment) external returns (uint256 partyId) {
         if (partyIdOfSigner[msg.sender] != 0) revert AlreadyRegistered();
 
@@ -167,29 +166,66 @@ contract ANARKeyBulletinBoard {
     }
 
     // ============================================================
-    //                          BACKUP PHASE
+    //                    DEMO BACKUP (ON-CHAIN)
     // ============================================================
 
-    /// @notice Publica el backup público phi para el owner que llama.
-    /// @dev guardianIds = B, |B| = n-1
-    ///      publicPoints = phi = [f(-1), f(-2), ..., f(-(n-t-1))]
-    function publishBackup(
+    /// @notice DEMO ONLY.
+    /// @dev Owner provides a demo secret scalar. Each guardian provides a deterministic
+    ///      signature over a unique digest. Contract verifies signatures, derives
+    ///      sigma_j = H(signature_j), interpolates the degree-(n-1) polynomial f,
+    ///      computes public points phi, and stores the backup.
+    ///
+    ///      This intentionally exposes too much for production, but is ideal for demos.
+    function publishBackupFromGuardianSignaturesDemo(
+        uint256 secretScalar,
         uint256[] calldata guardianIds,
-        uint16 t,
-        uint256[] calldata publicPoints
+        bytes[] calldata signatures,
+        uint16 t
     ) external returns (uint256 backupId) {
         uint256 ownerId = partyIdOfSigner[msg.sender];
         if (ownerId == 0) revert NotRegistered();
-
-        uint256 guardianCount = guardianIds.length;
-        if (guardianCount == 0) revert InvalidGuardianSet();
-        if (t + 1 > guardianCount) revert InvalidThreshold();
-
-        // En BUSS con n-1 guardianes, el número de puntos públicos es:
-        // n - t - 1 = (guardianCount + 1) - t - 1 = guardianCount - t
-        if (publicPoints.length != guardianCount - t) revert InvalidPublicPoints();
+        if (secretScalar == 0 || secretScalar >= FIELD_MODULUS) revert InvalidSecretScalar();
+        if (guardianIds.length == 0) revert InvalidGuardianSet();
+        if (guardianIds.length != signatures.length) revert LengthMismatch();
+        if (t + 1 > guardianIds.length) revert InvalidThreshold();
 
         _validateGuardianIds(guardianIds, ownerId);
+
+        uint64 backupNonce = uint64(block.timestamp);
+        uint256 guardianCount = guardianIds.length;
+
+        // Build the set of private points:
+        // f(0) = secretScalar
+        // f(j) = sigma_{i,j} = H(signature_{i,j})
+        uint256[] memory xs = new uint256[](guardianCount + 1);
+        uint256[] memory ys = new uint256[](guardianCount + 1);
+
+        xs[0] = 0;
+        ys[0] = secretScalar;
+
+        for (uint256 i = 0; i < guardianCount; i++) {
+            uint256 gid = guardianIds[i];
+            Party storage guardian = parties[gid];
+
+            bytes32 digest = sigmaMessageDigest(ownerId, gid, backupNonce);
+            address recovered = _recoverSigner(digest, signatures[i]);
+            if (recovered != guardian.signer) revert InvalidSignature();
+
+            uint256 sigma = _hashBytesToField(signatures[i]);
+
+            xs[i + 1] = gid % FIELD_MODULUS;
+            ys[i + 1] = sigma;
+        }
+
+        // In BUSS with n-1 guardians and threshold t+1, public points count is n-t-1.
+        // Since n = guardianCount + 1, count = guardianCount - t.
+        uint256 publicCount = guardianCount - t;
+        uint256[] memory publicPoints = new uint256[](publicCount);
+
+        for (uint256 k = 0; k < publicCount; k++) {
+            uint256 xNeg = FIELD_MODULUS - (k + 1); // -1, -2, ...
+            publicPoints[k] = _lagrangeEvaluate(xs, ys, xNeg);
+        }
 
         backupId = nextBackupId++;
         Backup storage b = _backups[backupId];
@@ -197,7 +233,7 @@ contract ANARKeyBulletinBoard {
         b.exists = true;
         b.backupId = backupId;
         b.ownerId = ownerId;
-        b.nonce = uint64(block.timestamp); // simple nonce/version
+        b.nonce = backupNonce;
         b.t = t;
         b.guardianCount = uint16(guardianCount);
         b.ownerPkCommitment = parties[ownerId].pkCommitment;
@@ -210,7 +246,6 @@ contract ANARKeyBulletinBoard {
         }
 
         for (uint256 i = 0; i < publicPoints.length; i++) {
-            require(publicPoints[i] < FIELD_MODULUS, "phi out of field");
             b.publicPoints.push(publicPoints[i]);
         }
 
@@ -221,7 +256,7 @@ contract ANARKeyBulletinBoard {
             ownerId,
             t,
             uint16(guardianCount),
-            b.nonce,
+            backupNonce,
             b.publicPointsHash
         );
     }
@@ -230,8 +265,7 @@ contract ANARKeyBulletinBoard {
     //                         RECOVERY PHASE
     // ============================================================
 
-    /// @notice Abre una sesión de recovery para un backup existente.
-    /// @dev Cualquiera puede abrirla; la privacidad real está off-chain.
+    /// @notice Open a recovery session for an existing backup.
     function openRecovery(uint256 backupId) external returns (uint256 sessionId) {
         Backup storage b = _backups[backupId];
         if (!b.exists || !b.active) revert BackupNotFound();
@@ -252,16 +286,15 @@ contract ANARKeyBulletinBoard {
         emit RecoveryOpened(sessionId, backupId, b.ownerId, b.t + 1);
     }
 
-    /// @notice El guardián envía su firma determinista sobre el mensaje sigma.
-    /// @dev Se verifica que la firma corresponda exactamente al mensaje único del backup
-    ///      y al signer EVM registrado para ese guardian.
-    ///      Luego se deriva sigma = H(signature) mod F.
+    /// @notice Guardian submits the deterministic signature for recovery.
+    /// @dev Contract verifies signature and derives sigma = H(signature).
     function submitDeterministicSignature(
         uint256 sessionId,
         bytes calldata signature
     ) external {
         RecoverySession storage s = sessions[sessionId];
-        if (!s.exists || s.closed) revert SessionNotFound();
+        if (!s.exists) revert SessionNotFound();
+        if (s.closed) revert RecoveryClosed();
 
         Backup storage b = _backups[s.backupId];
         uint256 guardianId = partyIdOfSigner[msg.sender];
@@ -278,12 +311,13 @@ contract ANARKeyBulletinBoard {
         address recovered = _recoverSigner(digest, signature);
         if (recovered != msg.sender) revert InvalidSignature();
 
-        uint256 sigma = _hashToField(signature);
+        uint256 sigma = _hashBytesToField(signature);
+
         submittedSigma[sessionId][guardianId] = sigma;
         sigmaSubmitted[sessionId][guardianId] = true;
         s.sharesReceived += 1;
 
-        emit SigmaSubmitted(sessionId, guardianId, sigma, signature);
+        emit SigmaSubmitted(sessionId, guardianId, sigma);
 
         if (s.sharesReceived >= s.sharesNeeded) {
             s.ready = true;
@@ -291,26 +325,21 @@ contract ANARKeyBulletinBoard {
         }
     }
 
-    /// @notice Cierra una sesión de recovery.
-    /// @dev Puede cerrarla el owner del backup o cualquiera una vez lista.
+    /// @notice Optional demo helper: close a session.
     function closeRecovery(uint256 sessionId) external {
         RecoverySession storage s = sessions[sessionId];
-        if (!s.exists || s.closed) revert SessionNotFound();
-
-        Backup storage b = _backups[s.backupId];
-        uint256 callerId = partyIdOfSigner[msg.sender];
-
-        if (callerId != b.ownerId && !s.ready) revert NotOwner();
+        if (!s.exists) revert SessionNotFound();
+        if (s.closed) revert RecoveryClosed();
 
         s.closed = true;
         emit SessionClosed(sessionId);
     }
 
     // ============================================================
-    //                    OFF-CHAIN RECOVERY HELPERS
+    //                    OFF-CHAIN / DEMO HELPERS
     // ============================================================
 
-    /// @notice Devuelve el backup completo necesario para reconstrucción off-chain.
+    /// @notice Return all public backup data.
     function getBackup(
         uint256 backupId
     )
@@ -344,10 +373,8 @@ contract ANARKeyBulletinBoard {
         );
     }
 
-    /// @notice Construye el mensaje único que el guardián debe firmar determinísticamente.
-    /// @dev Esto sigue la idea del paper para cold wallets:
-    ///      zeta_{i,j} = Sig_sk_j(message(i,j,nonce)),
-    ///      sigma_{i,j} = H(zeta_{i,j}).
+    /// @notice Unique digest a guardian must sign deterministically.
+    /// @dev Includes contract address and chainid to avoid replay across deployments/chains.
     function sigmaMessageDigest(
         uint256 ownerId,
         uint256 guardianId,
@@ -365,9 +392,9 @@ contract ANARKeyBulletinBoard {
         );
     }
 
-    /// @notice Helper puramente educativo para reconstrucción BUSS.
-    /// @dev NO se debería llamar en una transacción real, porque revelaría el secreto.
-    ///      Úsalo solo como referencia para scripts locales / tests.
+    /// @notice DEMO ONLY.
+    /// @dev Reconstruct f(0) from stored public points and provided guardian shares.
+    ///      This would reveal the recovered secret if used in a transaction.
     function reconstructSecretForDemo(
         uint256 backupId,
         uint256[] calldata guardianIds,
@@ -375,7 +402,6 @@ contract ANARKeyBulletinBoard {
     ) external view returns (uint256 secretScalar) {
         Backup storage b = _backups[backupId];
         if (!b.exists) revert BackupNotFound();
-
         if (guardianIds.length != b.t + 1 || sigmas.length != b.t + 1) {
             revert LengthMismatch();
         }
@@ -388,85 +414,31 @@ contract ANARKeyBulletinBoard {
     }
 
     /// @notice DEMO ONLY.
-/// @dev Construye y publica un backup completo on-chain a partir del secreto y los sigmas.
-///      NO usar en producción porque expone datos sensibles en la transacción.
-function publishBackupFromKnownInputsDemo(
-    uint256 secretScalar,
-    uint256[] calldata guardianIds,
-    uint256[] calldata sigmas,
-    uint16 t
-) external returns (uint256 backupId) {
-    uint256 ownerId = partyIdOfSigner[msg.sender];
-    if (ownerId == 0) revert NotRegistered();
-    if (secretScalar == 0 || secretScalar >= FIELD_MODULUS) revert InvalidSecretScalar();
-    if (guardianIds.length == 0) revert InvalidGuardianSet();
-    if (guardianIds.length != sigmas.length) revert LengthMismatch();
-    if (t + 1 > guardianIds.length) revert InvalidThreshold();
+    /// @dev Reconstruct f(0) using sigmas already submitted during a recovery session.
+    function reconstructSecretFromSessionForDemo(
+        uint256 sessionId,
+        uint256[] calldata guardianIds
+    ) external view returns (uint256 secretScalar) {
+        RecoverySession storage s = sessions[sessionId];
+        if (!s.exists) revert SessionNotFound();
+        if (!s.ready) revert RecoveryNotReady();
+        if (guardianIds.length != s.sharesNeeded) revert LengthMismatch();
 
-    _validateGuardianIds(guardianIds, ownerId);
+        uint256[] memory sigmas = new uint256[](guardianIds.length);
 
-    for (uint256 i = 0; i < sigmas.length; i++) {
-        require(sigmas[i] < FIELD_MODULUS, "sigma out of field");
+        for (uint256 i = 0; i < guardianIds.length; i++) {
+            uint256 gid = guardianIds[i];
+            if (!sigmaSubmitted[sessionId][gid]) revert RecoveryNotReady();
+            sigmas[i] = submittedSigma[sessionId][gid];
+        }
+
+        Backup storage b = _backups[s.backupId];
+        return _recoverAtZero(
+            b.publicPoints,
+            guardianIds,
+            sigmas
+        );
     }
-
-    uint256 guardianCount = guardianIds.length;
-    uint256 publicCount = guardianCount - t;
-
-    uint256[] memory xs = new uint256[](guardianCount + 1);
-    uint256[] memory ys = new uint256[](guardianCount + 1);
-
-    // Punto secreto: f(0) = secretScalar
-    xs[0] = 0;
-    ys[0] = secretScalar;
-
-    // Puntos de guardianes: f(j) = sigma_{i,j}
-    for (uint256 i = 0; i < guardianCount; i++) {
-        xs[i + 1] = guardianIds[i] % FIELD_MODULUS;
-        ys[i + 1] = sigmas[i];
-    }
-
-    // Calcular phi = [f(-1), f(-2), ..., f(-(n-t-1))]
-    // donde n = guardianCount + 1, así que hay guardianCount - t puntos públicos
-    uint256[] memory publicPoints = new uint256[](publicCount);
-    for (uint256 k = 0; k < publicCount; k++) {
-        uint256 xNeg = FIELD_MODULUS - (k + 1); // representa -1, -2, ...
-        publicPoints[k] = _lagrangeEvaluate(xs, ys, xNeg);
-    }
-
-    // Publicar backup igual que la ruta normal
-    backupId = nextBackupId++;
-    Backup storage b = _backups[backupId];
-
-    b.exists = true;
-    b.backupId = backupId;
-    b.ownerId = ownerId;
-    b.nonce = uint64(block.timestamp);
-    b.t = t;
-    b.guardianCount = uint16(guardianCount);
-    b.ownerPkCommitment = parties[ownerId].pkCommitment;
-    b.active = true;
-
-    for (uint256 i = 0; i < guardianIds.length; i++) {
-        uint256 gid = guardianIds[i];
-        b.guardianIds.push(gid);
-        isGuardianInBackup[backupId][gid] = true;
-    }
-
-    for (uint256 i = 0; i < publicPoints.length; i++) {
-        b.publicPoints.push(publicPoints[i]);
-    }
-
-    b.publicPointsHash = keccak256(abi.encode(publicPoints));
-
-    emit BackupPublished(
-        backupId,
-        ownerId,
-        t,
-        uint16(guardianCount),
-        b.nonce,
-        b.publicPointsHash
-    );
-}
 
     // ============================================================
     //                        INTERNAL HELPERS
@@ -481,7 +453,7 @@ function publishBackupFromKnownInputsDemo(
             uint256 gid = guardianIds[i];
             if (!parties[gid].registered) revert InvalidGuardianSet();
             if (gid == ownerId) revert InvalidGuardianSet();
-            if (i > 0 && gid <= last) revert InvalidGuardianSet(); // ordenado + sin duplicados
+            if (i > 0 && gid <= last) revert InvalidGuardianSet(); // sorted + unique
             last = gid;
         }
     }
@@ -510,19 +482,24 @@ function publishBackupFromKnownInputsDemo(
         return recovered;
     }
 
-    function _hashToField(bytes calldata signature) internal pure returns (uint256) {
-        uint256 x = uint256(keccak256(signature)) % FIELD_MODULUS;
+    function _hashBytesToField(bytes calldata data) internal pure returns (uint256) {
+        uint256 x = uint256(keccak256(data)) % FIELD_MODULUS;
         return x == 0 ? 1 : x;
     }
 
-    /// @dev Recupera f(0) a partir de:
-    /// - publicPoints = [f(-1), f(-2), ..., f(-(n-t-1))]
-    /// - guardianIds = [j1, ..., j_{t+1}]
-    /// - sigmas = [sigma_{i,j1}, ..., sigma_{i,j_{t+1}}]
+    function _hashBytesToFieldMem(bytes memory data) internal pure returns (uint256) {
+        uint256 x = uint256(keccak256(data)) % FIELD_MODULUS;
+        return x == 0 ? 1 : x;
+    }
+
+    /// @dev Recover f(0) from:
+    ///      publicPoints = [f(-1), f(-2), ..., f(-(n-t-1))]
+    ///      guardianIds = [j1, ..., j_{t+1}]
+    ///      sigmas     = [sigma_{i,j1}, ..., sigma_{i,j_{t+1}}]
     function _recoverAtZero(
         uint256[] storage publicPoints,
         uint256[] calldata guardianIds,
-        uint256[] calldata sigmas
+        uint256[] memory sigmas
     ) internal view returns (uint256) {
         uint256 total = publicPoints.length + guardianIds.length;
         uint256[] memory xs = new uint256[](total);
@@ -530,14 +507,13 @@ function publishBackupFromKnownInputsDemo(
 
         uint256 k = 0;
 
-        // x = -1, -2, ..., -(n-t-1) representados módulo p como p-1, p-2, ...
+        // x = -1, -2, ..., represented mod p as p-1, p-2, ...
         for (uint256 i = 0; i < publicPoints.length; i++) {
             xs[k] = FIELD_MODULUS - (i + 1);
             ys[k] = publicPoints[i];
             k++;
         }
 
-        // x = guardianId
         for (uint256 i = 0; i < guardianIds.length; i++) {
             xs[k] = guardianIds[i] % FIELD_MODULUS;
             ys[k] = sigmas[i] % FIELD_MODULUS;
@@ -547,7 +523,32 @@ function publishBackupFromKnownInputsDemo(
         return _lagrangeAtZero(xs, ys);
     }
 
-    /// @dev Interpolación de Lagrange evaluada en x=0.
+    /// @dev Evaluate the interpolated polynomial defined by (xs, ys) at xEval.
+    function _lagrangeEvaluate(
+        uint256[] memory xs,
+        uint256[] memory ys,
+        uint256 xEval
+    ) internal view returns (uint256 result) {
+        uint256 n = xs.length;
+        result = 0;
+
+        for (uint256 i = 0; i < n; i++) {
+            uint256 num = 1;
+            uint256 den = 1;
+
+            for (uint256 j = 0; j < n; j++) {
+                if (i == j) continue;
+
+                num = mulmod(num, _sub(xEval, xs[j]), FIELD_MODULUS);
+                den = mulmod(den, _sub(xs[i], xs[j]), FIELD_MODULUS);
+            }
+
+            uint256 li = mulmod(num, _inv(den), FIELD_MODULUS);
+            result = addmod(result, mulmod(ys[i], li, FIELD_MODULUS), FIELD_MODULUS);
+        }
+    }
+
+    /// @dev Lagrange interpolation evaluated at x=0.
     function _lagrangeAtZero(
         uint256[] memory xs,
         uint256[] memory ys
@@ -562,10 +563,7 @@ function publishBackupFromKnownInputsDemo(
             for (uint256 j = 0; j < n; j++) {
                 if (i == j) continue;
 
-                // num *= (0 - x_j) = -x_j
                 num = mulmod(num, _neg(xs[j]), FIELD_MODULUS);
-
-                // den *= (x_i - x_j)
                 den = mulmod(den, _sub(xs[i], xs[j]), FIELD_MODULUS);
             }
 
@@ -582,8 +580,7 @@ function publishBackupFromKnownInputsDemo(
         return addmod(a, FIELD_MODULUS - b, FIELD_MODULUS);
     }
 
-    /// @dev Inverso modular usando Fermat: a^(p-2) mod p
-    ///      mediante el precompile modexp (0x05).
+    /// @dev Modular inverse using Fermat and modexp precompile.
     function _inv(uint256 a) internal view returns (uint256) {
         return _modExp(a, FIELD_MODULUS - 2, FIELD_MODULUS);
     }
@@ -617,29 +614,4 @@ function publishBackupFromKnownInputsDemo(
         require(success, "modexp failed");
         result = abi.decode(output, (uint256));
     }
-
-    /// @dev Evalúa por interpolación de Lagrange el polinomio definido por (xs, ys) en xEval.
-function _lagrangeEvaluate(
-    uint256[] memory xs,
-    uint256[] memory ys,
-    uint256 xEval
-) internal view returns (uint256 result) {
-    uint256 n = xs.length;
-    result = 0;
-
-    for (uint256 i = 0; i < n; i++) {
-        uint256 num = 1;
-        uint256 den = 1;
-
-        for (uint256 j = 0; j < n; j++) {
-            if (i == j) continue;
-
-            num = mulmod(num, _sub(xEval, xs[j]), FIELD_MODULUS);
-            den = mulmod(den, _sub(xs[i], xs[j]), FIELD_MODULUS);
-        }
-
-        uint256 li = mulmod(num, _inv(den), FIELD_MODULUS);
-        result = addmod(result, mulmod(ys[i], li, FIELD_MODULUS), FIELD_MODULUS);
-    }
-}
 }
