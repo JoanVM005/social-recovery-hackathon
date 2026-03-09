@@ -17,3 +17,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./scripts:/app/scripts
+      - ./.env.demo:/app/.env.demo:ro
+      - ./wallets.demo.json:/app/wallets.demo.json:ro
+      - ./node_modules:/app/node_modules

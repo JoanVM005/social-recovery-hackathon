@@ -73,6 +73,15 @@ function hashToField(hexBytes) {
   return x === 0n ? 1n : x;
 }
 
+function parseCsv(name) {
+  const raw = process.env[name];
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
+
 async function main() {
   const contractAddress = process.env.CONTRACT_ADDRESS;
   const chainId = BigInt(process.env.CHAIN_ID);
@@ -81,14 +90,32 @@ async function main() {
   const secretScalar = BigInt(process.env.SECRET_SCALAR);
   const t = Number(process.env.THRESHOLD);
 
-  const guardianIds = process.env.GUARDIAN_IDS.split(",").map((x) => BigInt(x.trim()));
-  const guardianPrivateKeys = process.env.GUARDIAN_PRIVATE_KEYS.split(",").map((x) => x.trim());
+  const guardianIds = parseCsv("GUARDIAN_IDS").map((x) => BigInt(x));
+  const guardianPrivateKeys = parseCsv("GUARDIAN_PRIVATE_KEYS");
+  const guardianSignatures = parseCsv("GUARDIAN_SIGNATURES");
 
-  if (guardianIds.length !== guardianPrivateKeys.length) {
-    throw new Error("GUARDIAN_IDS and GUARDIAN_PRIVATE_KEYS length mismatch");
+  if (guardianIds.length === 0) {
+    throw new Error("GUARDIAN_IDS cannot be empty");
   }
+
   if (t + 1 > guardianIds.length) {
     throw new Error("Invalid threshold");
+  }
+
+  const usingProvidedSignatures = guardianSignatures.length > 0;
+
+  if (usingProvidedSignatures && guardianSignatures.length !== guardianIds.length) {
+    throw new Error("GUARDIAN_SIGNATURES length mismatch with GUARDIAN_IDS");
+  }
+
+  if (!usingProvidedSignatures && guardianPrivateKeys.length !== guardianIds.length) {
+    throw new Error("GUARDIAN_PRIVATE_KEYS length mismatch with GUARDIAN_IDS");
+  }
+
+  if (!usingProvidedSignatures && guardianPrivateKeys.length === 0) {
+    throw new Error(
+      "Provide either GUARDIAN_SIGNATURES (exact list) or GUARDIAN_PRIVATE_KEYS (to sign inside script)"
+    );
   }
 
   const xs = [0n];
@@ -100,15 +127,31 @@ async function main() {
 
   for (let i = 0; i < guardianIds.length; i++) {
     const guardianId = guardianIds[i];
-    const pk = guardianPrivateKeys[i];
-    const wallet = new ethers.Wallet(pk);
 
     const digest = sigmaDigest(contractAddress, chainId, ownerId, guardianId, backupNonce);
-    const sigObj = wallet.signingKey.sign(digest);
-    const signature = ethers.Signature.from(sigObj).serialized;
+    digests.push(digest);
+
+    let signature;
+    let address = null;
+
+    if (usingProvidedSignatures) {
+      signature = guardianSignatures[i];
+      if (!signature.startsWith("0x")) {
+        throw new Error(`Invalid signature format for guardian index ${i}`);
+      }
+      if (guardianPrivateKeys[i]) {
+        address = new ethers.Wallet(guardianPrivateKeys[i]).address;
+      }
+    } else {
+      const pk = guardianPrivateKeys[i];
+      const wallet = new ethers.Wallet(pk);
+      const sigObj = wallet.signingKey.sign(digest);
+      signature = ethers.Signature.from(sigObj).serialized;
+      address = wallet.address;
+    }
+
     const sigma = hashToField(signature);
 
-    digests.push(digest);
     signatures.push(signature);
     sigmas.push(sigma.toString());
 
@@ -128,24 +171,34 @@ async function main() {
       guardianIds: guardianIds.map(String),
       t,
       backupNonce: backupNonce.toString(),
-      publicPoints
+      publicPoints,
     },
     backupMeta: {
       contractAddress,
       chainId: chainId.toString(),
       ownerId: ownerId.toString(),
-      secretScalar: secretScalar.toString()
+      secretScalar: secretScalar.toString(),
     },
     guardians: guardianIds.map((gid, idx) => ({
       guardianId: gid.toString(),
-      address: new ethers.Wallet(guardianPrivateKeys[idx]).address,
+      address:
+        addressFromPrivateKey(guardianPrivateKeys[idx]) || null,
       digest: digests[idx],
       signature: signatures[idx],
-      sigma: sigmas[idx]
-    }))
+      sigma: sigmas[idx],
+    })),
   };
 
   console.log(JSON.stringify(output, null, 2));
+}
+
+function addressFromPrivateKey(pk) {
+  if (!pk) return null;
+  try {
+    return new ethers.Wallet(pk).address;
+  } catch {
+    return null;
+  }
 }
 
 main().catch((err) => {

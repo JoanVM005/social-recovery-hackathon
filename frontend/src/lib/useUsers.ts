@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react"
-
-const API_URL = "http://localhost:8000"
+import { api } from "@/lib/api"
 
 export interface BackendUser {
   username: string
   party_id: number | null
   role: string
   online: boolean
+  address?: string
 }
 
 export function useUsers() {
@@ -17,23 +17,41 @@ export function useUsers() {
   useEffect(() => {
     let cancelled = false
 
-    async function fetch_users() {
+    async function fetchUsers() {
       try {
-        const res = await fetch(`${API_URL}/users`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json = await res.json() as { users: BackendUser[] }
-        if (!cancelled) setUsers(json.users)
+        const community = await api.getCommunityMembers()
+        const mapped: BackendUser[] = community.members.map((member) => ({
+          username: member.username,
+          party_id: Number.parseInt(member.partyId, 10),
+          role: "member",
+          online: member.online,
+          address: member.address,
+        }))
+        if (!cancelled) {
+          setUsers(mapped)
+          setError(null)
+        }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
+        try {
+          const res = await fetch("http://localhost:8000/users")
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const json = (await res.json()) as { users: BackendUser[] }
+          if (!cancelled) {
+            setUsers(json.users)
+            setError(null)
+          }
+        } catch (fallbackErr) {
+          if (!cancelled) setError(fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr))
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
 
-    fetch_users()
+    fetchUsers()
 
-    // Refresh every 5 s so the online badge stays reasonably fresh.
-    const interval = setInterval(fetch_users, 5000)
+    // Refresh every 5 s so online state and party IDs stay fresh.
+    const interval = setInterval(fetchUsers, 5000)
     return () => {
       cancelled = true
       clearInterval(interval)

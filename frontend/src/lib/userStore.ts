@@ -4,6 +4,10 @@ export interface StoredUser {
   id: string
   username: string
   createdAt: string
+  walletAddress?: string
+  secretKey?: string
+  latestBackupId?: string
+  latestBackupDraftId?: string
 }
 
 export function saveUser(user: StoredUser): void {
@@ -22,6 +26,14 @@ export function getUser(): StoredUser | null {
 
 export function clearUser(): void {
   localStorage.removeItem(KEY)
+}
+
+export function updateUser(partial: Partial<StoredUser>): StoredUser | null {
+  const current = getUser()
+  if (!current) return null
+  const next = { ...current, ...partial }
+  saveUser(next)
+  return next
 }
 
 export function generateUserId(): string {

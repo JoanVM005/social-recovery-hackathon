@@ -1,0 +1,34 @@
+{
+  "owner": {
+    "name": "owner",
+    "address": "0x553f4Fbea3ebF0f172309687A8a96f0A15E43eFA",
+    "privateKey": "0x1077c8bf19e9a86d1f753c87e52f4d9ef85b41c9aed60f59d3ed8a27b8f7f24b",
+    "mnemonic": "ethics reduce liquid lunar pyramid advice spoil become oak entry pipe monitor",
+    "publicKey": "0x043020842b8d3637710181c6bb25d94fb849fc45b74ccbbfbb4145f3ff726f3e5d15044eaee3e537afaf2c5d9bf891bfbc2d99c3cba791a40776d3e8a09ae9923f",
+    "pkCommitment": "0x0290953b21483ca3a52690d0e021c9017c41b4b09fe201e1e706c765cbd4d063"
+  },
+  "guardian1": {
+    "name": "guardian1",
+    "address": "0xeeE9d0a6eC2f2A3189b0A0c623c189b8B17d2B5B",
+    "privateKey": "0xb82aa65dbc22e0809104335de9fe22ab1e41f3ed06b8a0e3b0c6f3e51dc49adc",
+    "mnemonic": "gather tank remind slush west ankle pave file swarm usual filter artist",
+    "publicKey": "0x043d206892b8cdbea85e87ac2fbb3d33de1b92ffb892d7149ae329f2c940867d6065e854d332e9d150b14f6d1c4821b7265fef96031e886dbaeb5a771dfbb599d5",
+    "pkCommitment": "0x39442799117b8c7b07f46d95ad7047a720e5197acd13b1f984d350824a261144"
+  },
+  "guardian2": {
+    "name": "guardian2",
+    "address": "0x0013983CC8DB0d40888d20C147CbA13a4c022143",
+    "privateKey": "0x8574d469c4da844f6182c2d772143e60b5e4bfa59f8ec2e5236b479247a89724",
+    "mnemonic": "notable proof drum enter pottery empty lunar planet damage differ salon toilet",
+    "publicKey": "0x04dfa52abb6a563766975316cc7563a44e16ca8fa35859b70ea163d1b5db9aa3688264fc9d37a83dedcd3669f81b3f45a2303fa0f3c7d08b43f3b04f96b3165bd8",
+    "pkCommitment": "0x56c8770bf70bec394bb030121e45bd66f1955be33bc55e5235a0e00a7c0efbf1"
+  },
+  "guardian3": {
+    "name": "guardian3",
+    "address": "0x4f3eae9b83133b4D77CD5f1aF969B518262AB89e",
+    "privateKey": "0xabbbb40fcf6309af90a7737adc3f342ae943e17484d496a925063b56f2e71390",
+    "mnemonic": "earn million legal cart wing feed feed chapter soda decrease hurdle quarter",
+    "publicKey": "0x04250860f33b9dd7e827d9c863dbbff02aa99ca7c25f979c5ea94d96988f9bbc56596648663e234a25bf9d2b9a45967f46665630162315606e1c85f1e6a2d95cfe",
+    "pkCommitment": "0x086f8db957f40516b4a5bf216df8c977b89179c185583975fe12b6c70b24016f"
+  }
+}

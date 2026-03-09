@@ -6,9 +6,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ChevronDown, User, MessageSquare, Settings, LogOut, ShieldCheck } from "lucide-react"
+import { ChevronDown, User, MessageSquare, Settings, LogOut, ShieldCheck, KeyRound } from "lucide-react"
 
-export function TopBar({ onLogout, onChooseGuardians }: { onLogout?: () => void; onChooseGuardians?: () => void }) {
+interface TopBarProps {
+  onLogout?: () => void
+  onOpenAssignGuardians?: () => void
+  onOpenRecoverSecret?: () => void
+  username?: string
+}
+
+function initialsOf(name: string): string {
+  const trimmed = name.trim()
+  if (!trimmed) return "U"
+  const parts = trimmed.split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase()
+}
+
+export function TopBar({ onLogout, onOpenAssignGuardians, onOpenRecoverSecret, username }: TopBarProps) {
+  const displayName = username?.trim() || "Player"
   return (
     <div className="bg-[#171a21] text-[#b8b6b4] text-sm">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-2">
@@ -24,10 +40,10 @@ export function TopBar({ onLogout, onChooseGuardians }: { onLogout?: () => void;
             <button className="flex items-center gap-2 rounded px-3 py-1.5 hover:bg-[#3d4450] focus:outline-none">
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="bg-[#4c6b22] text-xs text-white">
-                  JP
+                  {initialsOf(displayName)}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-[#b8b6b4]">JohnPlayer</span>
+              <span className="text-[#b8b6b4]">{displayName}</span>
               <ChevronDown className="h-3 w-3 text-[#4c6b22]" />
             </button>
           </DropdownMenuTrigger>
@@ -45,8 +61,11 @@ export function TopBar({ onLogout, onChooseGuardians }: { onLogout?: () => void;
               <Settings className="h-4 w-4" /> Account Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-[#2a475e]" />
-            <DropdownMenuItem onClick={onChooseGuardians} className="gap-2 text-sm text-[#67c1f5] focus:bg-[#3d4450] focus:text-[#67c1f5]">
-              <ShieldCheck className="h-4 w-4" /> Choose My Guardians
+            <DropdownMenuItem onClick={onOpenAssignGuardians} className="gap-2 text-sm text-[#67c1f5] focus:bg-[#3d4450] focus:text-[#67c1f5]">
+              <ShieldCheck className="h-4 w-4" /> Assign Guardians
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenRecoverSecret} className="gap-2 text-sm text-[#67c1f5] focus:bg-[#3d4450] focus:text-[#67c1f5]">
+              <KeyRound className="h-4 w-4" /> Recover Secret Key
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-[#2a475e]" />
             <DropdownMenuItem onClick={onLogout} className="gap-2 text-sm focus:bg-[#3d4450] focus:text-white">
