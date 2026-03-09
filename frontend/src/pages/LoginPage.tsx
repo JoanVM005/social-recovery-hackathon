@@ -19,7 +19,7 @@ function TextField({ icon, label, ...inputProps }: { icon: React.ReactNode; labe
   )
 }
 
-export function LoginPage({ onLogin, onSignUp }: { onLogin: () => void; onSignUp: () => void }) {
+export function LoginPage({ onLogin, onSignUp }: { onLogin: () => void; onSignUp: (username: string) => void }) {
   const [tab, setTab] = useState<Tab>("signin")
 
   return (
@@ -75,12 +75,15 @@ function SignInForm({ onLogin }: { onLogin: () => void }) {
   )
 }
 
-function SignUpForm({ onSignUp }: { onSignUp: () => void }) {
+function SignUpForm({ onSignUp }: { onSignUp: (username: string) => void }) {
+  const [username, setUsername] = useState("")
+
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSignUp() }} className="flex flex-col gap-4">
+    <form onSubmit={(e) => { e.preventDefault(); onSignUp(username) }} className="flex flex-col gap-4">
       <p className="text-[#8f98a0] text-xs leading-relaxed mb-1">Create your free AnarKey account. It only takes a minute.</p>
 
-      <TextField icon={<User className="h-4 w-4" />} label="Account name" type="text" autoComplete="username" placeholder="Account name" />
+      <TextField icon={<User className="h-4 w-4" />} label="Account name" type="text" autoComplete="username" placeholder="Account name"
+        value={username} onChange={(e) => setUsername(e.target.value)} />
       <TextField icon={<Mail className="h-4 w-4" />} label="Email address" type="email" autoComplete="email" placeholder="Email address" />
       <PasswordField label="Password" autoComplete="new-password" placeholder="Password" />
       <PasswordField label="Confirm password" autoComplete="new-password" placeholder="Confirm password" />

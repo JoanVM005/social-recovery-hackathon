@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { TopBar } from "@/components/layout/TopBar"
 import { Navbar } from "@/components/layout/Navbar"
 import { SubNav } from "@/components/layout/SubNav"
@@ -7,7 +7,9 @@ import { LoginPage } from "@/pages/LoginPage"
 import { ConnectWalletPage } from "@/pages/ConnectWalletPage"
 import { SecretKeyDrawer } from "@/components/ui/SecretKeyDrawer"
 import { GuardianModal } from "@/components/guardian/GuardianModal"
-import { saveUser, generateUserId } from "@/lib/userStore"
+import { GuardianRequestFlow } from "@/components/guardian/GuardianRequestFlow"
+import { saveUser, generateUserId, getUser } from "@/lib/userStore"
+import { useWebSocket } from "@/lib/useWebSocket"
 
 type Page = "login" | "connect-wallet" | "store"
 
@@ -21,17 +23,31 @@ function generateSecretKey(): string {
 
 function App() {
   const [page, setPage] = useState<Page>("login")
+  const [pendingUsername, setPendingUsername] = useState("")
   const [secretKey, setSecretKey] = useState<string | null>(null)
   const [showGuardians, setShowGuardians] = useState(false)
+  const [guardianRequest, setGuardianRequest] = useState<{ userId: string; username: string } | null>(null)
+
+  const handleWsMessage = useCallback((data: unknown) => {
+    const msg = data as { type: string; value?: string; username?: string }
+    if (msg.type === "guardian_request") {
+      const myId = getUser()?.id
+      if (msg.value && msg.value !== myId) {
+        setGuardianRequest({ userId: msg.value, username: msg.username ?? "Unknown" })
+      }
+    }
+  }, [])
+
+  const { send } = useWebSocket(page === "store", handleWsMessage)
 
   function handleConnected() {
     setSecretKey(generateSecretKey())
-    saveUser({ id: generateUserId(), createdAt: new Date().toISOString() })
+    saveUser({ id: generateUserId(), username: pendingUsername, createdAt: new Date().toISOString() })
     setPage("store")
   }
 
   if (page === "login") {
-    return <LoginPage onLogin={() => setPage("store")} onSignUp={() => setPage("connect-wallet")} />
+    return <LoginPage onLogin={() => setPage("store")} onSignUp={(username) => { setPendingUsername(username); setPage("connect-wallet") }} />
   }
 
   if (page === "connect-wallet") {
@@ -49,7 +65,25 @@ function App() {
       {secretKey && (
         <SecretKeyDrawer secretKey={secretKey} onDismiss={() => setSecretKey(null)} />
       )}
-      {showGuardians && <GuardianModal onClose={() => setShowGuardians(false)} />}
+      {guardianRequest && (
+        <GuardianRequestFlow
+          requesterUsername={guardianRequest.username}
+          onDeny={() => setGuardianRequest(null)}
+          onSubmitCode={(code) => {
+            console.log("[Guardian] secret code submitted:", code)
+            setGuardianRequest(null)
+          }}
+        />
+      )}
+      {showGuardians && (
+        <GuardianModal
+          onClose={() => setShowGuardians(false)}
+          onGuardiansConfirmed={() => {
+            const user = getUser()
+            if (user) send({ type: "guardian_selected", user_id: user.id, username: user.username })
+          }}
+        />
+      )}
     </div>
   )
 }

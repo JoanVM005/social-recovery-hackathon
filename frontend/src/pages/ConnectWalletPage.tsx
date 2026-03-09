@@ -78,6 +78,13 @@ export function ConnectWalletPage({ onConnected }: { onConnected: () => void }) 
               CONTINUE TO STORE →
             </SteamButton>
           )}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-[#2a475e]" />
+            <button onClick={onConnected} className="text-[#4a5568] hover:text-[#8f98a0] text-[10px] transition-colors whitespace-nowrap">
+              skip for now
+            </button>
+            <div className="flex-1 h-px bg-[#2a475e]" />
+          </div>
         </div>
       </div>
 

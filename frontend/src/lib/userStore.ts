@@ -2,6 +2,7 @@ const KEY = "anarkey_user"
 
 export interface StoredUser {
   id: string
+  username: string
   createdAt: string
 }
 
