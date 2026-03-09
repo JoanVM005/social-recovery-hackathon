@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 
-const FRIENDS = [
+export const FRIENDS = [
   { name: "Alex", status: "online", game: "Cyber Odyssey 2088" },
   { name: "Maria", status: "online", game: "Neon Drift" },
   { name: "Sam", status: "online", game: null },

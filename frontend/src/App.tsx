@@ -6,6 +6,7 @@ import { StorePage } from "@/pages/StorePage"
 import { LoginPage } from "@/pages/LoginPage"
 import { ConnectWalletPage } from "@/pages/ConnectWalletPage"
 import { SecretKeyDrawer } from "@/components/ui/SecretKeyDrawer"
+import { GuardianModal } from "@/components/guardian/GuardianModal"
 
 type Page = "login" | "connect-wallet" | "store"
 
@@ -20,6 +21,7 @@ function generateSecretKey(): string {
 function App() {
   const [page, setPage] = useState<Page>("login")
   const [secretKey, setSecretKey] = useState<string | null>(null)
+  const [showGuardians, setShowGuardians] = useState(false)
 
   function handleConnected() {
     setSecretKey(generateSecretKey())
@@ -37,7 +39,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[#1b2838] text-white">
       <div className="sticky top-0 z-50">
-        <TopBar onLogout={() => setPage("login")} />
+        <TopBar onLogout={() => setPage("login")} onChooseGuardians={() => setShowGuardians(true)} />
         <Navbar />
       </div>
       <SubNav />
@@ -45,6 +47,7 @@ function App() {
       {secretKey && (
         <SecretKeyDrawer secretKey={secretKey} onDismiss={() => setSecretKey(null)} />
       )}
+      {showGuardians && <GuardianModal onClose={() => setShowGuardians(false)} />}
     </div>
   )
 }
