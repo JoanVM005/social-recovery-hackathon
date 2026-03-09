@@ -1,0 +1,27 @@
+{
+  "name": "anarkey-offchain-demo",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "prepare:backup": "node scripts/prepare_backup.js",
+    "guardian:sign": "node scripts/guardian_sign.js",
+    "recover": "node scripts/recover_secret.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "ethers": "^6.16.0"
+  },
+  "description": "Social Recovery Hackathon implementing ANARkey approach",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JoanVM005/social-recovery-hackathon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JoanVM005/social-recovery-hackathon/issues"
+  },
+  "homepage": "https://github.com/JoanVM005/social-recovery-hackathon#readme"
+}
