@@ -1,4 +1,5 @@
-const KEY = "anarkey_user"
+const USERS_KEY = "anarkey_users"
+const ACTIVE_USER_ID_KEY = "anarkey_active_user_id"
 
 export interface StoredUser {
   id: string
@@ -10,22 +11,62 @@ export interface StoredUser {
   latestBackupDraftId?: string
 }
 
-export function saveUser(user: StoredUser): void {
-  localStorage.setItem(KEY, JSON.stringify(user))
-}
-
-export function getUser(): StoredUser | null {
-  const raw = localStorage.getItem(KEY)
-  if (!raw) return null
+function readUsers(): StoredUser[] {
+  const raw = localStorage.getItem(USERS_KEY)
+  if (!raw) return []
   try {
-    return JSON.parse(raw) as StoredUser
+    const parsed = JSON.parse(raw) as StoredUser[]
+    return Array.isArray(parsed) ? parsed : []
   } catch {
-    return null
+    return []
   }
 }
 
+function writeUsers(users: StoredUser[]): void {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users))
+}
+
+function setActiveUserId(userId: string | null): void {
+  if (userId) {
+    sessionStorage.setItem(ACTIVE_USER_ID_KEY, userId)
+  } else {
+    sessionStorage.removeItem(ACTIVE_USER_ID_KEY)
+  }
+}
+
+function getActiveUserId(): string | null {
+  return sessionStorage.getItem(ACTIVE_USER_ID_KEY)
+}
+
+export function saveUser(user: StoredUser): void {
+  const users = readUsers()
+  const index = users.findIndex((item) => item.id === user.id)
+  if (index >= 0) {
+    users[index] = user
+  } else {
+    users.push(user)
+  }
+  writeUsers(users)
+  setActiveUserId(user.id)
+}
+
+export function getUser(): StoredUser | null {
+  const users = readUsers()
+  if (users.length === 0) return null
+
+  const activeId = getActiveUserId()
+  if (activeId) {
+    const found = users.find((item) => item.id === activeId) ?? null
+    if (found) return found
+  }
+
+  const latest = users[users.length - 1] ?? null
+  if (latest) setActiveUserId(latest.id)
+  return latest
+}
+
 export function clearUser(): void {
-  localStorage.removeItem(KEY)
+  setActiveUserId(null)
 }
 
 export function updateUser(partial: Partial<StoredUser>): StoredUser | null {
@@ -34,6 +75,10 @@ export function updateUser(partial: Partial<StoredUser>): StoredUser | null {
   const next = { ...current, ...partial }
   saveUser(next)
   return next
+}
+
+export function listUsers(): StoredUser[] {
+  return readUsers()
 }
 
 export function generateUserId(): string {

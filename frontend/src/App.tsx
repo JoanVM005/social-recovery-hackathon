@@ -9,7 +9,7 @@ import { ConnectWalletPage } from "@/pages/ConnectWalletPage"
 import { SecretKeyDrawer } from "@/components/ui/SecretKeyDrawer"
 import { SocialRecoveryModal } from "@/components/recovery/SocialRecoveryModal"
 import { api } from "@/lib/api"
-import { generateUserId, getUser, saveUser, updateUser, type StoredUser } from "@/lib/userStore"
+import { clearUser, generateUserId, getUser, saveUser, updateUser, type StoredUser } from "@/lib/userStore"
 
 type Page = "login" | "connect-wallet" | "store"
 type RecoveryMode = "assign" | "recover"
@@ -36,7 +36,7 @@ function App() {
   const guardianAlertedSessions = useRef<Set<string>>(new Set())
   const ownerReadyAlertedSessions = useRef<Set<string>>(new Set())
 
-  function handleConnected() {
+  function handleConnected(connectedAddress: `0x${string}`) {
     const key = generateSecretKey()
     const username = pendingUsername.trim() || storedUser?.username || "Player"
     const nowIso = new Date().toISOString()
@@ -44,7 +44,7 @@ function App() {
       id: storedUser?.id ?? generateUserId(),
       username,
       createdAt: storedUser?.createdAt ?? nowIso,
-      walletAddress: address,
+      walletAddress: connectedAddress,
       secretKey: key,
       latestBackupId: storedUser?.latestBackupId,
       latestBackupDraftId: storedUser?.latestBackupDraftId,
@@ -151,6 +151,10 @@ function App() {
           onOpenAssignGuardians={() => setRecoveryMode("assign")}
           onOpenRecoverSecret={() => setRecoveryMode("recover")}
           onLogout={() => {
+            clearUser()
+            setStoredUser(null)
+            setSecretKey(null)
+            setLatestBackupId(null)
             setRecoveryMode(null)
             setPage("login")
           }}

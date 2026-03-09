@@ -1,15 +1,22 @@
-import { useAccount, useConnect } from "wagmi"
+import { useAccount, useConnect, useDisconnect } from "wagmi"
 import { injected } from "wagmi/connectors"
 import { Wallet, CheckCircle, AlertCircle, Loader } from "lucide-react"
 import { SteamButton } from "@/components/ui/steam-button"
 import steamLogo from "@/assets/logo_steam.svg"
 
-export function ConnectWalletPage({ onConnected }: { onConnected: () => void }) {
+export function ConnectWalletPage({ onConnected }: { onConnected: (address: `0x${string}`) => void }) {
   const { address, isConnected } = useAccount()
   const { connect, isPending, isError } = useConnect()
+  const { disconnect } = useDisconnect()
 
   function connectMetaMask() {
     connect({ connector: injected() })
+  }
+
+  function switchWallet() {
+    disconnect()
+    // Re-open wallet selection flow after disconnecting current account.
+    setTimeout(() => connectMetaMask(), 50)
   }
 
   return (
@@ -70,21 +77,23 @@ export function ConnectWalletPage({ onConnected }: { onConnected: () => void }) 
             <SteamButton onClick={connectMetaMask} disabled={isPending}>
               <div className="flex items-center justify-center gap-2">
                 <Wallet className="h-4 w-4" />
-                {isPending ? "CONNECTING…" : "CONNECT METAMASK"}
+                {isPending ? "CONNECTING..." : "CONNECT METAMASK"}
               </div>
             </SteamButton>
           ) : (
-            <SteamButton onClick={onConnected}>
-              CONTINUE TO STORE →
-            </SteamButton>
+            <div className="flex flex-col gap-2">
+              <SteamButton onClick={() => onConnected(address as `0x${string}`)}>
+                USE THIS WALLET
+              </SteamButton>
+              <button
+                type="button"
+                onClick={switchWallet}
+                className="rounded border border-[#2a475e] px-3 py-2 text-xs text-[#8f98a0] hover:text-white"
+              >
+                CONNECT DIFFERENT WALLET
+              </button>
+            </div>
           )}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-[#2a475e]" />
-            <button onClick={onConnected} className="text-[#4a5568] hover:text-[#8f98a0] text-[10px] transition-colors whitespace-nowrap">
-              skip for now
-            </button>
-            <div className="flex-1 h-px bg-[#2a475e]" />
-          </div>
         </div>
       </div>
 
