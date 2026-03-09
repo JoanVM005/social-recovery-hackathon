@@ -21,7 +21,8 @@ contract ANARKeyOffchainBoard {
     error GuardianNotAllowed();
     error AlreadySubmitted();
     error InvalidSignature();
-    error RecoveryClosed();
+    error RecoverySessionClosed();
+
 
     // ============================================================
     //                          CONSTANTS
@@ -249,7 +250,7 @@ contract ANARKeyOffchainBoard {
     ) external {
         RecoverySession storage s = sessions[sessionId];
         if (!s.exists) revert SessionNotFound();
-        if (s.closed) revert RecoveryClosed();
+        if (s.closed) revert RecoverySessionClosed();
 
         Backup storage b = _backups[s.backupId];
 
@@ -283,7 +284,7 @@ contract ANARKeyOffchainBoard {
     function closeRecovery(uint256 sessionId) external {
         RecoverySession storage s = sessions[sessionId];
         if (!s.exists) revert SessionNotFound();
-        if (s.closed) revert RecoveryClosed();
+        if (s.closed) revert RecoverySessionClosed();
 
         s.closed = true;
         emit RecoveryClosed(sessionId);
