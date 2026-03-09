@@ -5,13 +5,17 @@ import { Input } from "@/components/ui/input"
 
 interface Props {
   requesterUsername: string
+  /** Names the owner selected their guardians by (from their FRIENDS list). */
+  guardianSlots: string[]
   onDeny: () => void
-  onSubmitCode: (code: string) => void
+  /** Called with the guardian's secret code and the slot name they claimed. */
+  onSubmitCode: (code: string, slot: string) => void
 }
 
-export function GuardianRequestFlow({ requesterUsername, onDeny, onSubmitCode }: Props) {
+export function GuardianRequestFlow({ requesterUsername, guardianSlots, onDeny, onSubmitCode }: Props) {
   const [step, setStep] = useState<"prompt" | "secret">("prompt")
   const [code, setCode] = useState("")
+  const [slot, setSlot] = useState(guardianSlots[0] ?? "")
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -35,7 +39,11 @@ export function GuardianRequestFlow({ requesterUsername, onDeny, onSubmitCode }:
         {step === "prompt" ? (
           <PromptStep requesterUsername={requesterUsername} onDeny={onDeny} onAccept={() => setStep("secret")} />
         ) : (
-          <SecretStep code={code} onChange={setCode} onSubmit={() => onSubmitCode(code)} />
+          <SecretStep
+            code={code}
+            onChange={setCode}
+            onSubmit={() => onSubmitCode(code, slot)}
+          />
         )}
       </div>
     </div>
@@ -64,7 +72,9 @@ function PromptStep({ requesterUsername, onDeny, onAccept }: {
 }
 
 function SecretStep({ code, onChange, onSubmit }: {
-  code: string; onChange: (v: string) => void; onSubmit: () => void
+  code: string
+  onChange: (v: string) => void
+  onSubmit: () => void
 }) {
   return (
     <>
@@ -74,7 +84,7 @@ function SecretStep({ code, onChange, onSubmit }: {
       <div className="flex flex-col gap-4">
         <Input
           className="steam-input font-mono tracking-widest"
-          placeholder="xxxx-xxxx-xxxx-xxxx"
+          placeholder="xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx"
           value={code}
           onChange={(e) => onChange(e.target.value)}
           autoFocus

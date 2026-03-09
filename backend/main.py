@@ -24,9 +24,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info(f"Received guardian_selected event with user_id: {data['user_id']}")
                 user_id = data["user_id"]
                 username = data.get("username", "Unknown")
+                selected_names = data.get("selected_names", [])
 
                 for connection in active_connections:
-                    await connection.send_json({"type": "guardian_request", "value": user_id, "username": username})
+                    await connection.send_json({
+                        "type": "guardian_request",
+                        "value": user_id,
+                        "username": username,
+                        "selected_names": selected_names,
+                    })
+
+            elif data["type"] == "guardian_response":
+                logger.info(f"Received guardian_response from {data.get('guardian_name')}")
+                for connection in active_connections:
+                    await connection.send_json(data)
 
     except Exception as e:
         logger.error(f"WebSocket error: {e}")

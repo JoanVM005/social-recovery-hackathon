@@ -4,7 +4,13 @@ import { FRIENDS } from "@/components/store/FriendsList"
 import { GuardianConfigStep } from "./GuardianConfigStep"
 import { GuardianSelectStep } from "./GuardianSelectStep"
 
-interface Props { onClose: () => void; onGuardiansConfirmed?: () => void }
+interface GuardianConfig {
+  threshold: number
+  totalGuardians: number
+  selectedGuardians: string[]
+}
+
+interface Props { onClose: () => void; onGuardiansConfirmed?: (config: GuardianConfig) => void }
 
 export function GuardianModal({ onClose, onGuardiansConfirmed }: Props) {
   const [step, setStep] = useState<1 | 2>(1)
@@ -19,7 +25,7 @@ export function GuardianModal({ onClose, onGuardiansConfirmed }: Props) {
   }
 
   function handleConfirm() {
-    onGuardiansConfirmed?.()
+    onGuardiansConfirmed?.({ threshold, totalGuardians, selectedGuardians: selected })
     onClose()
   }
 
