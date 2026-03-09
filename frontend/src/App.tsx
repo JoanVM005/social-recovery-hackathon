@@ -7,6 +7,7 @@ import { LoginPage } from "@/pages/LoginPage"
 import { ConnectWalletPage } from "@/pages/ConnectWalletPage"
 import { SecretKeyDrawer } from "@/components/ui/SecretKeyDrawer"
 import { GuardianModal } from "@/components/guardian/GuardianModal"
+import { saveUser, generateUserId } from "@/lib/userStore"
 
 type Page = "login" | "connect-wallet" | "store"
 
@@ -25,6 +26,7 @@ function App() {
 
   function handleConnected() {
     setSecretKey(generateSecretKey())
+    saveUser({ id: generateUserId(), createdAt: new Date().toISOString() })
     setPage("store")
   }
 
