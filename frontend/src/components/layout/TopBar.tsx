@@ -6,7 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ChevronDown, User, MessageSquare, Settings, LogOut, Wallet, ShieldCheck } from "lucide-react"
+import { ChevronDown, User, MessageSquare, Settings, LogOut, ShieldCheck } from "lucide-react"
 
 export function TopBar({ onLogout, onChooseGuardians }: { onLogout?: () => void; onChooseGuardians?: () => void }) {
   return (
@@ -45,9 +45,6 @@ export function TopBar({ onLogout, onChooseGuardians }: { onLogout?: () => void;
               <Settings className="h-4 w-4" /> Account Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-[#2a475e]" />
-            <DropdownMenuItem className="gap-2 text-sm text-[#beee11] focus:bg-[#3d4450] focus:text-[#beee11]">
-              <Wallet className="h-4 w-4" /> Connect My Wallet
-            </DropdownMenuItem>
             <DropdownMenuItem onClick={onChooseGuardians} className="gap-2 text-sm text-[#67c1f5] focus:bg-[#3d4450] focus:text-[#67c1f5]">
               <ShieldCheck className="h-4 w-4" /> Choose My Guardians
             </DropdownMenuItem>
