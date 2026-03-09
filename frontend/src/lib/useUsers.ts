@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { api } from "@/lib/api"
+import { API_BASE_URL, api } from "@/lib/api"
 
 export interface BackendUser {
   username: string
@@ -33,7 +33,7 @@ export function useUsers() {
         }
       } catch (err) {
         try {
-          const res = await fetch("http://localhost:8000/users")
+          const res = await fetch(`${API_BASE_URL}/users`)
           if (!res.ok) throw new Error(`HTTP ${res.status}`)
           const json = (await res.json()) as { users: BackendUser[] }
           if (!cancelled) {

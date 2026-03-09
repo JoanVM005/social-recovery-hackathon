@@ -9,6 +9,11 @@ import { SteamButton } from "@/components/ui/steam-button"
 import { Input } from "@/components/ui/input"
 import {
   api,
+  MOCK_MODE,
+  mockChainOpenRecovery,
+  mockChainPublishBackup,
+  mockChainRegisterParty,
+  mockWaitForTransactionReceipt,
   type BackupPreparePendingResponse,
   type BackupPrepareReadyResponse,
 } from "@/lib/api"
@@ -28,6 +33,7 @@ interface SocialRecoveryModalProps {
   mode: RecoveryMode | null
   onClose: () => void
   currentUsername: string
+  walletAddress?: `0x${string}`
   secretKey: string | null
   latestBackupId?: string | null
   onBackupPublished?: (backupId: string, backupDraftId: string) => void
@@ -99,6 +105,7 @@ export function SocialRecoveryModal({
   mode,
   onClose,
   currentUsername,
+  walletAddress,
   secretKey,
   latestBackupId,
   onBackupPublished,
@@ -132,6 +139,7 @@ export function SocialRecoveryModal({
   const [guardianActionBusy, setGuardianActionBusy] = useState("")
   const [reconstructBusy, setReconstructBusy] = useState(false)
   const [reconstructResult, setReconstructResult] = useState<Record<string, unknown> | null>(null)
+  const activeAddress = (address ?? walletAddress) as `0x${string}` | undefined
 
   const communityQuery = useQuery({
     queryKey: ["community-members"],
@@ -141,16 +149,16 @@ export function SocialRecoveryModal({
   })
 
   const selfCommunityMember = useMemo(() => {
-    if (!address) return null
+    if (!activeAddress) return null
     return (communityQuery.data?.members ?? []).find(
-      (member) => member.address.toLowerCase() === address.toLowerCase(),
+      (member) => member.address.toLowerCase() === activeAddress.toLowerCase(),
     ) ?? null
-  }, [communityQuery.data?.members, address])
+  }, [communityQuery.data?.members, activeAddress])
 
   const guardianTasksQuery = useQuery({
-    queryKey: ["guardian-tasks-modal", address ?? ""],
-    queryFn: () => api.getGuardianTasks({ guardianAddress: address }),
-    enabled: Boolean(mode && address),
+    queryKey: ["guardian-tasks-modal", activeAddress ?? ""],
+    queryFn: () => api.getGuardianTasks({ guardianAddress: activeAddress }),
+    enabled: Boolean(mode && activeAddress),
     refetchInterval: 5000,
   })
 
@@ -166,13 +174,13 @@ export function SocialRecoveryModal({
   }, [mode])
 
   useEffect(() => {
-    if (!mode || !address) return
-    const activeAddress = address
+    if (!mode || !activeAddress) return
+    const heartbeatAddress = activeAddress
 
     let cancelled = false
     async function beat() {
       try {
-        await api.communityHeartbeat(activeAddress)
+        await api.communityHeartbeat(heartbeatAddress)
       } catch {
         if (!cancelled) {
           // Ignore heartbeat errors for users not joined yet.
@@ -189,7 +197,7 @@ export function SocialRecoveryModal({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [mode, address])
+  }, [mode, activeAddress])
 
   useEffect(() => {
     if (!secretKey || secretScalarInput) return
@@ -209,8 +217,12 @@ export function SocialRecoveryModal({
   if (!mode) return null
 
   async function handleJoinCommunity() {
-    if (!address || !publicClient) {
+    if (!activeAddress) {
       setJoinErr("Connect a wallet first")
+      return
+    }
+    if (!MOCK_MODE && !publicClient) {
+      setJoinErr("Public client is not available")
       return
     }
 
@@ -219,20 +231,28 @@ export function SocialRecoveryModal({
     setJoinInfo(null)
 
     try {
-      const prep = await api.partyRegisterPrepare(address)
+      const prep = await api.partyRegisterPrepare(activeAddress)
       if (!prep.alreadyRegistered) {
-        const txHash = await writeContractAsync({
-          address: CONTRACT_ADDRESS,
-          abi: OFFCHAIN_BOARD_ABI,
-          functionName: "registerParty",
-          args: [prep.pkCommitment],
-        })
-        await publicClient.waitForTransactionReceipt({ hash: txHash })
+        if (MOCK_MODE) {
+          const tx = await mockChainRegisterParty({
+            address: activeAddress,
+            pkCommitment: prep.pkCommitment,
+          })
+          await mockWaitForTransactionReceipt(tx.txHash)
+        } else {
+          const txHash = await writeContractAsync({
+            address: CONTRACT_ADDRESS,
+            abi: OFFCHAIN_BOARD_ABI,
+            functionName: "registerParty",
+            args: [prep.pkCommitment],
+          })
+          await publicClient!.waitForTransactionReceipt({ hash: txHash })
+        }
       }
 
       await api.communityJoin({
         username: currentUsername,
-        address,
+        address: activeAddress,
       })
 
       setJoinInfo("Joined community and wallet is ready for social recovery.")
@@ -245,7 +265,7 @@ export function SocialRecoveryModal({
   }
 
   async function handlePrepareBackup(finalizeDraft: boolean) {
-    if (!address) {
+    if (!activeAddress) {
       setAssignErr("Connect a wallet first")
       return
     }
@@ -272,7 +292,7 @@ export function SocialRecoveryModal({
     setAssignErr(null)
     try {
       const response = await api.backupPrepare({
-        ownerAddress: address,
+        ownerAddress: activeAddress,
         guardianIds,
         threshold: guardianConfig.threshold,
         secretScalar: secretScalarInput.trim(),
@@ -297,29 +317,39 @@ export function SocialRecoveryModal({
   }
 
   async function handlePublishBackup() {
-    if (!preparedBackup || !publicClient) return
+    if (!preparedBackup) return
+    if (!MOCK_MODE && !publicClient) return
 
     setAssignBusy(true)
     setAssignErr(null)
     try {
-      const txHash = await writeContractAsync({
-        address: CONTRACT_ADDRESS,
-        abi: OFFCHAIN_BOARD_ABI,
-        functionName: "publishBackup",
-        args: [
-          toBigIntArray(preparedBackup.guardianIds),
-          preparedBackup.t,
-          BigInt(preparedBackup.backupNonce),
-          toBigIntArray(preparedBackup.publicPoints),
-        ],
-      })
-      setPublishTxHash(txHash)
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
-      const backupId = decodeBackupIdFromReceipt(receipt)
-      if (backupId) {
-        setPublishedBackupId(backupId)
-        setBackupIdInput(backupId)
-        onBackupPublished?.(backupId, preparedBackup.backupDraftId)
+      if (MOCK_MODE) {
+        const tx = await mockChainPublishBackup(preparedBackup)
+        setPublishTxHash(tx.txHash)
+        await mockWaitForTransactionReceipt(tx.txHash)
+        setPublishedBackupId(tx.backupId)
+        setBackupIdInput(tx.backupId)
+        onBackupPublished?.(tx.backupId, preparedBackup.backupDraftId)
+      } else {
+        const txHash = await writeContractAsync({
+          address: CONTRACT_ADDRESS,
+          abi: OFFCHAIN_BOARD_ABI,
+          functionName: "publishBackup",
+          args: [
+            toBigIntArray(preparedBackup.guardianIds),
+            preparedBackup.t,
+            BigInt(preparedBackup.backupNonce),
+            toBigIntArray(preparedBackup.publicPoints),
+          ],
+        })
+        setPublishTxHash(txHash)
+        const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash })
+        const backupId = decodeBackupIdFromReceipt(receipt)
+        if (backupId) {
+          setPublishedBackupId(backupId)
+          setBackupIdInput(backupId)
+          onBackupPublished?.(backupId, preparedBackup.backupDraftId)
+        }
       }
     } catch (error) {
       setAssignErr(error instanceof Error ? error.message : String(error))
@@ -329,8 +359,12 @@ export function SocialRecoveryModal({
   }
 
   async function handleOpenRecovery() {
-    if (!publicClient || !backupIdInput.trim()) {
+    if (!backupIdInput.trim()) {
       setRecoverErr("Provide backupId first")
+      return
+    }
+    if (!MOCK_MODE && !publicClient) {
+      setRecoverErr("Public client is not available")
       return
     }
 
@@ -338,17 +372,24 @@ export function SocialRecoveryModal({
     setOpenBusy(true)
     setReconstructResult(null)
     try {
-      const txHash = await writeContractAsync({
-        address: CONTRACT_ADDRESS,
-        abi: OFFCHAIN_BOARD_ABI,
-        functionName: "openRecovery",
-        args: [BigInt(backupIdInput.trim())],
-      })
-      setOpenTxHash(txHash)
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
-      const openedSessionId = decodeSessionIdFromReceipt(receipt)
-      if (openedSessionId) {
-        setSessionId(openedSessionId)
+      if (MOCK_MODE) {
+        const tx = await mockChainOpenRecovery(backupIdInput.trim())
+        setOpenTxHash(tx.txHash)
+        await mockWaitForTransactionReceipt(tx.txHash)
+        setSessionId(tx.sessionId)
+      } else {
+        const txHash = await writeContractAsync({
+          address: CONTRACT_ADDRESS,
+          abi: OFFCHAIN_BOARD_ABI,
+          functionName: "openRecovery",
+          args: [BigInt(backupIdInput.trim())],
+        })
+        setOpenTxHash(txHash)
+        const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash })
+        const openedSessionId = decodeSessionIdFromReceipt(receipt)
+        if (openedSessionId) {
+          setSessionId(openedSessionId)
+        }
       }
     } catch (error) {
       setRecoverErr(error instanceof Error ? error.message : String(error))
@@ -358,7 +399,7 @@ export function SocialRecoveryModal({
   }
 
   async function handleGuardianTask(task: Record<string, unknown>) {
-    if (!walletClient || !address || !publicClient) {
+    if (!MOCK_MODE && (!walletClient || !activeAddress || !publicClient)) {
       setRecoverErr("Connect wallet and open MetaMask to approve guardian tasks")
       return
     }
@@ -372,45 +413,56 @@ export function SocialRecoveryModal({
     setRecoverErr(null)
 
     try {
-      const prepare = await api.guardianSign({
-        purpose: purpose as "backup_setup" | "recovery_session",
-        mode: "real",
-        guardianId,
-        sessionId: typeof task.sessionId === "string" ? task.sessionId : undefined,
-        backupDraftId: typeof task.backupDraftId === "string" ? task.backupDraftId : undefined,
-        submitOnchain: false,
-      })
-
-      const digestRaw = String(prepare.digest ?? "")
-      if (!isHex(digestRaw)) {
-        throw new Error("Backend returned an invalid digest")
-      }
-
-      const signature = (await walletClient.request({
-        method: "eth_sign",
-        params: [address, digestRaw],
-      })) as `0x${string}`
-
-      await api.guardianSign({
-        purpose: purpose as "backup_setup" | "recovery_session",
-        mode: "real",
-        guardianId,
-        sessionId: typeof task.sessionId === "string" ? task.sessionId : undefined,
-        backupDraftId: typeof task.backupDraftId === "string" ? task.backupDraftId : undefined,
-        signature,
-        submitOnchain: false,
-      })
-
-      if (purpose === "recovery_session") {
-        const sessionValue = String(task.sessionId ?? "")
-        if (!sessionValue) throw new Error("Missing sessionId for recovery contribution")
-        const txHash = await writeContractAsync({
-          address: CONTRACT_ADDRESS,
-          abi: OFFCHAIN_BOARD_ABI,
-          functionName: "submitDeterministicSignature",
-          args: [BigInt(sessionValue), signature],
+      if (MOCK_MODE) {
+        await api.guardianSign({
+          purpose: purpose as "backup_setup" | "recovery_session",
+          mode: "demo",
+          guardianId,
+          sessionId: typeof task.sessionId === "string" ? task.sessionId : undefined,
+          backupDraftId: typeof task.backupDraftId === "string" ? task.backupDraftId : undefined,
+          submitOnchain: purpose === "recovery_session",
         })
-        await publicClient.waitForTransactionReceipt({ hash: txHash })
+      } else {
+        const prepare = await api.guardianSign({
+          purpose: purpose as "backup_setup" | "recovery_session",
+          mode: "real",
+          guardianId,
+          sessionId: typeof task.sessionId === "string" ? task.sessionId : undefined,
+          backupDraftId: typeof task.backupDraftId === "string" ? task.backupDraftId : undefined,
+          submitOnchain: false,
+        })
+
+        const digestRaw = String(prepare.digest ?? "")
+        if (!isHex(digestRaw)) {
+          throw new Error("Backend returned an invalid digest")
+        }
+
+        const signature = (await walletClient!.request({
+          method: "eth_sign",
+          params: [activeAddress!, digestRaw],
+        })) as `0x${string}`
+
+        await api.guardianSign({
+          purpose: purpose as "backup_setup" | "recovery_session",
+          mode: "real",
+          guardianId,
+          sessionId: typeof task.sessionId === "string" ? task.sessionId : undefined,
+          backupDraftId: typeof task.backupDraftId === "string" ? task.backupDraftId : undefined,
+          signature,
+          submitOnchain: false,
+        })
+
+        if (purpose === "recovery_session") {
+          const sessionValue = String(task.sessionId ?? "")
+          if (!sessionValue) throw new Error("Missing sessionId for recovery contribution")
+          const txHash = await writeContractAsync({
+            address: CONTRACT_ADDRESS,
+            abi: OFFCHAIN_BOARD_ABI,
+            functionName: "submitDeterministicSignature",
+            args: [BigInt(sessionValue), signature],
+          })
+          await publicClient!.waitForTransactionReceipt({ hash: txHash })
+        }
       }
 
       await guardianTasksQuery.refetch()
@@ -460,7 +512,9 @@ export function SocialRecoveryModal({
         <div className="flex items-center justify-between border-b border-[#2a475e] px-5 py-4">
           <div>
             <h2 className="text-sm font-bold tracking-wide text-white">Social Recovery</h2>
-            <p className="text-xs text-[#8f98a0]">Sepolia + wallets reales - todo el flujo desde la web</p>
+            <p className="text-xs text-[#8f98a0]">
+              {MOCK_MODE ? "Mock mode activo - endpoints y botones simulados en frontend" : "Sepolia + wallets reales - todo el flujo desde la web"}
+            </p>
           </div>
           <button onClick={onClose} className="rounded border border-[#2a475e] px-3 py-1 text-xs text-[#8f98a0] hover:text-white">
             CLOSE
@@ -502,7 +556,7 @@ export function SocialRecoveryModal({
                 </p>
 
                 <div className="mt-3 rounded border border-[#2a475e] bg-[#111a28] p-3 text-xs text-[#c7d5e0]">
-                  <div>Wallet: <span className="font-mono">{address ?? "Not connected"}</span></div>
+                  <div>Wallet: <span className="font-mono">{activeAddress ?? "Not connected"}</span></div>
                   <div className="mt-1">
                     Community status:{" "}
                     <span className={selfCommunityMember ? "text-[#beee11]" : "text-yellow-300"}>
@@ -512,7 +566,7 @@ export function SocialRecoveryModal({
                 </div>
 
                 <div className="mt-3 flex gap-3">
-                  <SteamButton onClick={() => void handleJoinCommunity()} disabled={joinBusy || !address} className="max-w-52">
+                  <SteamButton onClick={() => void handleJoinCommunity()} disabled={joinBusy || !activeAddress} className="max-w-52">
                     {joinBusy ? "JOINING..." : "JOIN COMMUNITY"}
                   </SteamButton>
                   <SteamButton onClick={() => void communityQuery.refetch()} className="max-w-44">
@@ -552,7 +606,7 @@ export function SocialRecoveryModal({
                 </label>
 
                 <div className="mt-3 flex flex-wrap gap-3">
-                  <SteamButton onClick={() => void handlePrepareBackup(false)} disabled={assignBusy || !guardianConfig || !address} className="max-w-56">
+                  <SteamButton onClick={() => void handlePrepareBackup(false)} disabled={assignBusy || !guardianConfig || !activeAddress} className="max-w-56">
                     {assignBusy ? "PREPARING..." : "START BACKUP DRAFT"}
                   </SteamButton>
                   <SteamButton onClick={() => void handlePrepareBackup(true)} disabled={assignBusy || !backupDraftId} className="max-w-64">

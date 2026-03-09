@@ -32,6 +32,7 @@ function App() {
   const [showSecretDrawer, setShowSecretDrawer] = useState(false)
   const [recoveryMode, setRecoveryMode] = useState<RecoveryMode | null>(null)
   const [latestBackupId, setLatestBackupId] = useState<string | null>(() => getUser()?.latestBackupId ?? null)
+  const activeWalletAddress = (address ?? storedUser?.walletAddress) as `0x${string}` | undefined
 
   const guardianAlertedSessions = useRef<Set<string>>(new Set())
   const ownerReadyAlertedSessions = useRef<Set<string>>(new Set())
@@ -68,8 +69,8 @@ function App() {
   }, [address])
 
   useEffect(() => {
-    if (page !== "store" || !address) return
-    const activeAddress = address
+    if (page !== "store" || !activeWalletAddress) return
+    const activeAddress = activeWalletAddress
 
     let cancelled = false
 
@@ -117,7 +118,7 @@ function App() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [page, address])
+  }, [page, activeWalletAddress])
 
   if (page === "login") {
     return (
@@ -168,6 +169,7 @@ function App() {
           mode={recoveryMode}
           onClose={() => setRecoveryMode(null)}
           currentUsername={storedUser?.username || pendingUsername || "Player"}
+          walletAddress={activeWalletAddress}
           secretKey={secretKey ?? storedUser?.secretKey ?? null}
           latestBackupId={latestBackupId}
           onBackupPublished={(backupId, backupDraftId) => {

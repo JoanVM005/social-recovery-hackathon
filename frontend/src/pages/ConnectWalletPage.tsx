@@ -1,19 +1,38 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi"
 import { injected } from "wagmi/connectors"
+import { useState } from "react"
 import { Wallet, CheckCircle, AlertCircle, Loader } from "lucide-react"
 import { SteamButton } from "@/components/ui/steam-button"
 import steamLogo from "@/assets/logo_steam.svg"
+import { connectMockWallet, disconnectMockWallet, getMockWalletAddress, MOCK_MODE } from "@/lib/api"
 
 export function ConnectWalletPage({ onConnected }: { onConnected: (address: `0x${string}`) => void }) {
   const { address, isConnected } = useAccount()
   const { connect, isPending, isError } = useConnect()
   const { disconnect } = useDisconnect()
+  const [mockAddress, setMockAddress] = useState<`0x${string}` | null>(() => getMockWalletAddress())
+
+  const connected = MOCK_MODE ? Boolean(mockAddress) : isConnected
+  const activeAddress = MOCK_MODE ? mockAddress : (isConnected ? address : undefined)
+  const showPending = !MOCK_MODE && isPending
+  const showError = !MOCK_MODE && isError
 
   function connectMetaMask() {
+    if (MOCK_MODE) {
+      const next = connectMockWallet()
+      setMockAddress(next)
+      return
+    }
     connect({ connector: injected() })
   }
 
   function switchWallet() {
+    if (MOCK_MODE) {
+      disconnectMockWallet()
+      const next = connectMockWallet(true)
+      setMockAddress(next)
+      return
+    }
     disconnect()
     // Re-open wallet selection flow after disconnecting current account.
     setTimeout(() => connectMetaMask(), 50)
@@ -45,25 +64,25 @@ export function ConnectWalletPage({ onConnected }: { onConnected: (address: `0x$
               />
             </div>
 
-            {!isConnected && !isPending && !isError && (
+            {!connected && !showPending && !showError && (
               <p className="text-[#8f98a0] text-xs">MetaMask not connected</p>
             )}
-            {isPending && (
+            {showPending && (
               <div className="flex items-center gap-2 text-[#67c1f5] text-xs">
                 <Loader className="h-3.5 w-3.5 animate-spin" /> Waiting for MetaMask…
               </div>
             )}
-            {isConnected && address && (
+            {connected && activeAddress && (
               <div className="flex flex-col items-center gap-1">
                 <div className="flex items-center gap-1.5 text-[#beee11] text-xs">
-                  <CheckCircle className="h-3.5 w-3.5" /> Wallet connected
+                  <CheckCircle className="h-3.5 w-3.5" /> {MOCK_MODE ? "Mock wallet connected" : "Wallet connected"}
                 </div>
                 <span className="text-[#8f98a0] text-[10px] font-mono">
-                  {address.slice(0, 6)}…{address.slice(-4)}
+                  {activeAddress.slice(0, 6)}…{activeAddress.slice(-4)}
                 </span>
               </div>
             )}
-            {isError && (
+            {showError && (
               <div className="flex items-center gap-1.5 text-red-400 text-xs">
                 <AlertCircle className="h-3.5 w-3.5" />
                 {typeof (window as any).ethereum === "undefined"
@@ -73,16 +92,16 @@ export function ConnectWalletPage({ onConnected }: { onConnected: (address: `0x$
             )}
           </div>
 
-          {!isConnected ? (
-            <SteamButton onClick={connectMetaMask} disabled={isPending}>
+          {!connected ? (
+            <SteamButton onClick={connectMetaMask} disabled={showPending}>
               <div className="flex items-center justify-center gap-2">
                 <Wallet className="h-4 w-4" />
-                {isPending ? "CONNECTING..." : "CONNECT METAMASK"}
+                {showPending ? "CONNECTING..." : MOCK_MODE ? "CONNECT MOCK WALLET" : "CONNECT METAMASK"}
               </div>
             </SteamButton>
           ) : (
             <div className="flex flex-col gap-2">
-              <SteamButton onClick={() => onConnected(address as `0x${string}`)}>
+              <SteamButton onClick={() => onConnected(activeAddress as `0x${string}`)}>
                 USE THIS WALLET
               </SteamButton>
               <button
@@ -90,7 +109,7 @@ export function ConnectWalletPage({ onConnected }: { onConnected: (address: `0x$
                 onClick={switchWallet}
                 className="rounded border border-[#2a475e] px-3 py-2 text-xs text-[#8f98a0] hover:text-white"
               >
-                CONNECT DIFFERENT WALLET
+                {MOCK_MODE ? "SWITCH MOCK WALLET" : "CONNECT DIFFERENT WALLET"}
               </button>
             </div>
           )}
