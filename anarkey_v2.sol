@@ -25,6 +25,7 @@ contract ANARKeyBulletinBoard {
     error InvalidSignature();
     error RecoveryNotReady();
     error LengthMismatch();
+    error InvalidSecretScalar();
 
     // ============================================================
     //                          CONSTANTS
@@ -386,6 +387,87 @@ contract ANARKeyBulletinBoard {
         );
     }
 
+    /// @notice DEMO ONLY.
+/// @dev Construye y publica un backup completo on-chain a partir del secreto y los sigmas.
+///      NO usar en producción porque expone datos sensibles en la transacción.
+function publishBackupFromKnownInputsDemo(
+    uint256 secretScalar,
+    uint256[] calldata guardianIds,
+    uint256[] calldata sigmas,
+    uint16 t
+) external returns (uint256 backupId) {
+    uint256 ownerId = partyIdOfSigner[msg.sender];
+    if (ownerId == 0) revert NotRegistered();
+    if (secretScalar == 0 || secretScalar >= FIELD_MODULUS) revert InvalidSecretScalar();
+    if (guardianIds.length == 0) revert InvalidGuardianSet();
+    if (guardianIds.length != sigmas.length) revert LengthMismatch();
+    if (t + 1 > guardianIds.length) revert InvalidThreshold();
+
+    _validateGuardianIds(guardianIds, ownerId);
+
+    for (uint256 i = 0; i < sigmas.length; i++) {
+        require(sigmas[i] < FIELD_MODULUS, "sigma out of field");
+    }
+
+    uint256 guardianCount = guardianIds.length;
+    uint256 publicCount = guardianCount - t;
+
+    uint256[] memory xs = new uint256[](guardianCount + 1);
+    uint256[] memory ys = new uint256[](guardianCount + 1);
+
+    // Punto secreto: f(0) = secretScalar
+    xs[0] = 0;
+    ys[0] = secretScalar;
+
+    // Puntos de guardianes: f(j) = sigma_{i,j}
+    for (uint256 i = 0; i < guardianCount; i++) {
+        xs[i + 1] = guardianIds[i] % FIELD_MODULUS;
+        ys[i + 1] = sigmas[i];
+    }
+
+    // Calcular phi = [f(-1), f(-2), ..., f(-(n-t-1))]
+    // donde n = guardianCount + 1, así que hay guardianCount - t puntos públicos
+    uint256[] memory publicPoints = new uint256[](publicCount);
+    for (uint256 k = 0; k < publicCount; k++) {
+        uint256 xNeg = FIELD_MODULUS - (k + 1); // representa -1, -2, ...
+        publicPoints[k] = _lagrangeEvaluate(xs, ys, xNeg);
+    }
+
+    // Publicar backup igual que la ruta normal
+    backupId = nextBackupId++;
+    Backup storage b = _backups[backupId];
+
+    b.exists = true;
+    b.backupId = backupId;
+    b.ownerId = ownerId;
+    b.nonce = uint64(block.timestamp);
+    b.t = t;
+    b.guardianCount = uint16(guardianCount);
+    b.ownerPkCommitment = parties[ownerId].pkCommitment;
+    b.active = true;
+
+    for (uint256 i = 0; i < guardianIds.length; i++) {
+        uint256 gid = guardianIds[i];
+        b.guardianIds.push(gid);
+        isGuardianInBackup[backupId][gid] = true;
+    }
+
+    for (uint256 i = 0; i < publicPoints.length; i++) {
+        b.publicPoints.push(publicPoints[i]);
+    }
+
+    b.publicPointsHash = keccak256(abi.encode(publicPoints));
+
+    emit BackupPublished(
+        backupId,
+        ownerId,
+        t,
+        uint16(guardianCount),
+        b.nonce,
+        b.publicPointsHash
+    );
+}
+
     // ============================================================
     //                        INTERNAL HELPERS
     // ============================================================
@@ -535,4 +617,29 @@ contract ANARKeyBulletinBoard {
         require(success, "modexp failed");
         result = abi.decode(output, (uint256));
     }
+
+    /// @dev Evalúa por interpolación de Lagrange el polinomio definido por (xs, ys) en xEval.
+function _lagrangeEvaluate(
+    uint256[] memory xs,
+    uint256[] memory ys,
+    uint256 xEval
+) internal view returns (uint256 result) {
+    uint256 n = xs.length;
+    result = 0;
+
+    for (uint256 i = 0; i < n; i++) {
+        uint256 num = 1;
+        uint256 den = 1;
+
+        for (uint256 j = 0; j < n; j++) {
+            if (i == j) continue;
+
+            num = mulmod(num, _sub(xEval, xs[j]), FIELD_MODULUS);
+            den = mulmod(den, _sub(xs[i], xs[j]), FIELD_MODULUS);
+        }
+
+        uint256 li = mulmod(num, _inv(den), FIELD_MODULUS);
+        result = addmod(result, mulmod(ys[i], li, FIELD_MODULUS), FIELD_MODULUS);
+    }
+}
 }
